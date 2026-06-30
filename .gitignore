@@ -1,0 +1,24 @@
+# Output files (recorded videos, thumbnails, etc.)
+output/
+
+# Models
+server/models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+
+# Node
+client/node_modules/
+client/dist/
+
+# Editor
+.vscode/
+.idea/
+*.suo
+.DS_Store

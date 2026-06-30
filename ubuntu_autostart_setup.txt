@@ -1,0 +1,243 @@
+=============================================================================
+ 駄菓子屋さんカメラ - Ubuntu ログイン時 自動起動セットアップ手順
+=============================================================================
+
+このアプリは本来、以下の手順を手動で行ってから AI 人認識・自動録画が始まります。
+  1. Flask 起動
+  2. Vite 起動
+  3. ブラウザでログイン → カメラID設定
+  4. ビューア画面へ移行
+  5. 「AI連動録画」をクリック → ready_record=true
+
+今回の変更で、サーバー(app.py)に --camera_id 引数を追加しました。
+  - 例: python app.py --camera_id=2
+  - --camera_id を渡すと、起動時にそのカメラを自動初期化します。
+  - さらに ready_record=true（AI連動録画オン）の状態で立ち上がるため、
+    ブラウザ操作なしで AI 人認識・自動録画が始まります。
+
+以下は Ubuntu で自動起動させるための設定です。
+（systemd の「ユーザーサービス」を使います）
+
+※ この端末は「ログインなしで GUI デスクトップに自動移行する（自動ログイン）」
+  構成です。自動ログインでもユーザーセッションは自動的に開始されるため、
+  ユーザーサービスはそのまま起動します。手動ログインは不要です。
+
+
+-----------------------------------------------------------------------------
+0. 前提
+-----------------------------------------------------------------------------
+- プロジェクトを各自のホーム配下に置きます。例: ~/vendor_camera_ts
+  （別の場所に置く場合は、後述のパスをすべて読み替えてください）
+- Python の依存関係をインストール済みであること。
+  venv を使う場合は server/.venv に作成しておくと start_camera.sh が自動で使います。
+    cd ~/vendor_camera_ts/server
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install flask flask-cors flask-socketio opencv-python mediapipe insightface onnxruntime numpy
+- client の依存関係をインストール済みであること。
+    cd ~/vendor_camera_ts/client
+    npm install
+
+
+-----------------------------------------------------------------------------
+1. 起動スクリプトに実行権限を付与
+-----------------------------------------------------------------------------
+    cd ~/vendor_camera_ts
+    chmod +x start_camera.sh
+
+  動作確認（手動起動）:
+    CAMERA_ID=2 ./start_camera.sh
+  Flask(5000) と Vite(5173) が起動すれば OK です。Ctrl+C で停止します。
+
+
+-----------------------------------------------------------------------------
+2. systemd ユーザーサービスを設置
+-----------------------------------------------------------------------------
+    mkdir -p ~/.config/systemd/user
+    cp ~/vendor_camera_ts/vendor-camera.service ~/.config/systemd/user/
+
+  ※ vendor-camera.service 内のパス（%h/vendor_camera_ts）と CAMERA_ID を、
+    実際の設置場所・使用カメラに合わせて編集してください。
+    %h はログインユーザーのホームディレクトリに展開されます。
+
+
+-----------------------------------------------------------------------------
+3. サービスを有効化（ログイン時に自動起動）
+-----------------------------------------------------------------------------
+    systemctl --user daemon-reload
+    systemctl --user enable vendor-camera.service
+    systemctl --user start vendor-camera.service     # 今すぐ起動して確認
+
+  状態確認:
+    systemctl --user status vendor-camera.service
+
+  ログ確認:
+    journalctl --user -u vendor-camera.service -f
+
+
+-----------------------------------------------------------------------------
+4. （任意）自動ログイン前でも・GUIに依存せず常駐させたい場合
+-----------------------------------------------------------------------------
+  自動ログイン構成であれば、デスクトップ移行時にユーザーセッションが開始され、
+  本サービスも自動起動するため通常は追加設定は不要です。
+  ただし、自動ログインが完了する前のブート直後から常駐させたい、あるいは
+  GUI セッションに依存せず動かしたい場合は linger を有効化します。
+    sudo loginctl enable-linger $USER
+  これで再起動後、ユーザーセッションの開始を待たずにサービスが起動します。
+
+
+-----------------------------------------------------------------------------
+5. 自動でブラウザを開きたい場合（任意・キオスク用途）
+-----------------------------------------------------------------------------
+  AI 連動録画自体はブラウザ無しで動作しますが、ライブ映像を画面に表示したい
+  場合は、デスクトップ自動起動でブラウザをキオスク表示できます。
+  ~/.config/autostart/dagashiya-kiosk.desktop を作成:
+
+    [Desktop Entry]
+    Type=Application
+    Name=Dagashiya Camera Kiosk
+    Exec=google-chrome --kiosk http://localhost:5173
+    X-GNOME-Autostart-enabled=true
+
+  （Chromium の場合は chromium-browser に置き換え）
+
+
+-----------------------------------------------------------------------------
+停止・無効化
+-----------------------------------------------------------------------------
+    systemctl --user stop vendor-camera.service       # 停止
+    systemctl --user disable vendor-camera.service    # 自動起動を無効化
+
+
+=============================================================================
+ 電源オフ（Raspberry Pi Pico からの信号でシャットダウン）
+=============================================================================
+ハード構成:
+  - Intel NUC をケース内に格納（モニター・キーボード・マウス無し）
+  - 電源オンは BIOS の「通電で自動起動」に従う（コンセント接続でオン）
+  - 電源オフは USB 接続の Raspberry Pi Pico からの信号で行う
+
+仕組み:
+  - Pico を USB キーボードとして認識させ、ある GPIO が 1 秒以上オンに
+    なったら Ctrl+Alt+S を 1 回送信する（pico_shutdown_button.py）。
+  - NUC 側は常駐リスナー(shutdown_listener.py)が Ctrl+Alt+S を検知して
+    キーボード入力なし・デスクトップ非依存で shutdown を実行する。
+
+
+-----------------------------------------------------------------------------
+A. Raspberry Pi Pico 側
+-----------------------------------------------------------------------------
+  1. Pico に MicroPython v1.23 以降（usb.device を含むビルド）を書き込む。
+  2. usb-device-keyboard パッケージを導入。
+       - Thonny: Tools > Manage packages で "usb-device-keyboard" を検索して install
+       - もしくは: mpremote mip install usb-device-keyboard
+  3. pico_shutdown_button.py を Pico に main.py として保存（通電で自動実行）。
+       mpremote cp pico_shutdown_button.py :main.py
+  4. GPIO 番号や ACTIVE_HIGH をファイル先頭の設定で配線に合わせて調整する。
+  5. Pico を NUC の USB ポートに接続する。
+
+
+-----------------------------------------------------------------------------
+B. Ubuntu(NUC) 側 - リスナーの設置
+-----------------------------------------------------------------------------
+  1. 依存パッケージをインストール:
+       sudo apt install python3-evdev
+
+  2. systemd システムサービスを設置（リスナーは root 権限が必要）:
+       sudo cp ~/vendor_camera_ts/vendor-camera-shutdown.service /etc/systemd/system/
+
+     ※ vendor-camera-shutdown.service 内の ExecStart のパス
+       (/home/USER/vendor_camera_ts/shutdown_listener.py) を、
+       実際の設置場所・ユーザー名に書き換えてください。
+
+  3. 有効化して起動:
+       sudo systemctl daemon-reload
+       sudo systemctl enable vendor-camera-shutdown.service
+       sudo systemctl start vendor-camera-shutdown.service
+
+  4. 状態・ログ確認:
+       sudo systemctl status vendor-camera-shutdown.service
+       sudo journalctl -u vendor-camera-shutdown.service -f
+
+  5. 動作確認:
+       Pico の GPIO を 1 秒以上オンにして、NUC がシャットダウンすれば成功。
+
+
+-----------------------------------------------------------------------------
+補足
+-----------------------------------------------------------------------------
+  - サービスは root で動作するため shutdown に sudo は不要です。
+  - Ctrl+Alt+S はデスクトップのショートカットと競合する可能性があります。
+    競合する場合は、設定 > キーボード で該当ショートカットを無効化するか、
+    pico_shutdown_button.py / shutdown_listener.py のキーを別の組み合わせに
+    変更してください（例: Ctrl+Alt+Q など）。
+=============================================================================
+
+
+=============================================================================
+ 温湿度ロガー（DHT センサー / 毎時 :00 :10 :20 ... に PC が要求）
+=============================================================================
+仕組み:
+  - Pico に DHT 機能入りの pico_shutdown_dht.py を書き込む
+    （シャットダウンボタンと DHT を兼ねた版。main.py として保存）。
+  - PC は USB シリアル(/dev/ttyACM*)に "READ" を送り、Pico が
+    "T=23.0,H=45.0" を返す。
+  - PC の systemd timer が毎時 :00 :10 :20 ... に dht_logger.py を起動し、
+    SQLite(output/sensor.db) に 1 行記録する。
+
+SQLite テーブル sensor:
+  datetime    TEXT  "YYYY-MM-DD HH:MM:SS"
+  temperature REAL  温度（小数第1位）
+  humidity    REAL  湿度（小数第1位）
+
+
+-----------------------------------------------------------------------------
+A. Pico 側
+-----------------------------------------------------------------------------
+  1. 追加パッケージを導入:
+       mpremote mip install usb-device-keyboard
+       mpremote mip install usb-device-cdc
+  2. pico_shutdown_dht.py を main.py として保存:
+       mpremote cp pico_shutdown_dht.py :main.py
+  3. DHT_PIN / DHT_TYPE をファイル先頭で配線・型番に合わせて調整。
+
+
+-----------------------------------------------------------------------------
+B. PC(Ubuntu) 側
+-----------------------------------------------------------------------------
+  1. 依存をインストール:
+       sudo apt install python3-serial
+
+  2. 手動で動作確認:
+       python3 ~/vendor_camera_ts/dht_logger.py
+     "[dht_logger] Recorded: ..." が出れば OK。
+     ポートが /dev/ttyACM0 以外なら環境変数で指定:
+       DHT_SERIAL_PORT=/dev/ttyACM1 python3 ~/vendor_camera_ts/dht_logger.py
+
+  3. systemd の service と timer を設置:
+       sudo cp ~/vendor_camera_ts/vendor-camera-dht.service /etc/systemd/system/
+       sudo cp ~/vendor_camera_ts/vendor-camera-dht.timer  /etc/systemd/system/
+
+     ※ vendor-camera-dht.service の ExecStart のパス（と必要なら
+       DHT_SERIAL_PORT / DHT_DB_PATH）を実環境に合わせて編集してください。
+
+  4. タイマーを有効化:
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now vendor-camera-dht.timer
+
+  5. 確認:
+       systemctl list-timers vendor-camera-dht.timer
+       sudo journalctl -u vendor-camera-dht.service -f
+       sqlite3 ~/vendor_camera_ts/output/sensor.db "SELECT * FROM sensor ORDER BY datetime DESC LIMIT 5;"
+
+
+-----------------------------------------------------------------------------
+補足
+-----------------------------------------------------------------------------
+  - シリアルアクセスに root もしくは dialout グループ権限が必要です。
+    上記は root の system サービスで実行しています。
+  - /dev/ttyACM* は接続順で変わることがあります。安定させたい場合は
+    udev ルールでシンボリックリンク（例 /dev/dht）を作って指定してください。
+  - DHT11 は精度が低い（±2℃ / ±5%RH）ため、用途次第で DHT22 を推奨。
+    その場合は pico_shutdown_dht.py の DHT_TYPE を "DHT22" に変更。
+=============================================================================

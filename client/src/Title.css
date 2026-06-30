@@ -1,0 +1,173 @@
+.titleMain {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100vh;
+  position: relative;
+}
+
+.backgroundImage {
+  position: fixed;
+  inset: 0;
+  background-image: url("/illust.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.3;
+  z-index: -1;
+}
+
+.kanban {
+  position: relative;
+  display: inline-block;
+}
+
+@font-face {
+    font-family: "kanbanFont";
+    src: url("KaiseiOpti-Medium.ttf") format('truetype');
+}
+
+img.kanbanImage {
+  width: 800px;
+  height: auto;
+  display: block;
+}
+
+.kanbanTitle{
+  font-family: 'kanbanFont', sans-serif;
+  font-size: 40px;
+  font-weight: bold;
+  color: saddlebrown;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.titleMenu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.btnMenu {
+  width: 600px;
+  height: 80px;
+  font-size: 32px;
+  font-family: 'kanbanFont', sans-serif;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.btnMenu:hover {
+  background-color: #222;
+}
+
+.colorView {
+  background-color: #4caf50;
+  color: white;
+}
+
+.colorRecord {
+  background-color: #2196f3;
+  color: white;
+}
+
+.colorAnalysis {
+  background-color: #ff9800;
+  color: white;
+}
+
+.colorNoCamera {
+  background-color: #666;
+  color: #aaa;
+  cursor: not-allowed;
+}
+
+/* 管理者エリア */
+.adminArea {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.settingBtn {
+  width: 60px;
+  height: 60px;
+  font-size: 40px;
+  border-radius: 50%;
+  background-color: #333;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+}
+
+.loginArea {
+  color: #222;
+  background: lightsalmon;
+  padding: 20px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.loginBtns {
+  display: flex;
+  gap: 10px;
+}
+
+.controlPanel {
+  background: lightblue;
+  padding: 20px 5px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+} 
+
+.controlPanel-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0;
+  color: #222;
+}
+
+.cameraList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 400px;
+  align-items: center;
+}
+
+.cameraItem {
+  border-radius: 10px;
+  width: 100px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  background: darkblue;
+  color: white;
+  cursor: pointer;
+}
+
+.cameraItem:active {
+  background: blue;
+}

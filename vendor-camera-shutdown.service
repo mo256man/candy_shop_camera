@@ -1,0 +1,28 @@
+# =============================================================================
+# Ubuntu - シャットダウンリスナー systemd システムサービス
+# -----------------------------------------------------------------------------
+# Pico からの Ctrl+Alt+S を受けて shutdown するリスナーを root で常駐させます。
+# （/dev/input 読み取りと shutdown 実行のため root 権限が必要）
+#
+# 設置・有効化の手順は ubuntu_autostart_setup.txt の「シャットダウン」章を参照。
+# =============================================================================
+[Unit]
+Description=Shutdown listener (Ctrl+Alt+S from Raspberry Pi Pico)
+After=multi-user.target
+
+[Service]
+Type=simple
+
+# ---- 環境に合わせて絶対パスを書き換えてください ----
+ExecStart=/usr/bin/python3 /home/USER/vendor_camera_ts/shutdown_listener.py
+# ----------------------------------------------------
+
+Restart=on-failure
+RestartSec=3
+
+# ログを journald に出力（journalctl -u vendor-camera-shutdown で確認可能）
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
