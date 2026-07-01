@@ -20,17 +20,53 @@ import time
 from datetime import datetime
 
 import serial
+import serial.tools.list_ports
 
 # ---- 設定（環境変数で上書き可能）----
-SERIAL_PORT = os.environ.get("DHT_SERIAL_PORT", "/dev/ttyACM0")
+# DHT_SERIAL_PORT が未設定の場合は Raspberry Pi Pico を自動検出する
+_ENV_PORT = os.environ.get("DHT_SERIAL_PORT")
 DB_PATH = os.environ.get(
     "DHT_DB_PATH",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "sensor.db"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "sensor.sqlite"),
 )
 READ_TIMEOUT = 5.0   # 1 回の応答待ち秒数（DHT 測定に数秒かかる）
 RETRIES = 3          # 取得失敗時のリトライ回数
 # -------------------------------------
 
+# Raspberry Pi の USB Vendor ID
+_RASPI_VID = 0x2E8A
+
+
+def find_pico_port():
+    """接続中のシリアルポートから Raspberry Pi Pico を自動検出して返す。
+
+    環境変数 DHT_SERIAL_PORT が設定されている場合はそれを優先する。
+    VID 0x2E8A（Raspberry Pi）のデバイスを検索し、最初に見つかったポートを返す。
+    見つからない場合は RuntimeError を送出する。
+    """
+    if _ENV_PORT:
+        return _ENV_PORT
+
+    candidates = [
+        p for p in serial.tools.list_ports.comports()
+        if p.vid == _RASPI_VID
+    ]
+
+    if not candidates:
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        raise RuntimeError(
+            "Raspberry Pi Pico が見つかりません。"
+            f" 検出されたポート: {ports or '(なし)'}"
+        )
+
+    if len(candidates) > 1:
+        print(
+            f"[dht_logger] Pico が複数検出されました: "
+            f"{[p.device for p in candidates]}  -> {candidates[0].device} を使用",
+            flush=True,
+        )
+
+    return candidates[0].device
 
 def init_db(conn):
     conn.execute(
@@ -47,9 +83,17 @@ def init_db(conn):
 
 def read_sensor():
     """Pico に READ を送り (temperature, humidity) を返す。失敗時は None。"""
+    try:
+        port = find_pico_port()
+    except RuntimeError as e:
+        print(f"[dht_logger] Port detection error: {e}", flush=True)
+        return None
+
+    print(f"[dht_logger] Using port: {port}", flush=True)
+
     for attempt in range(RETRIES):
         try:
-            with serial.Serial(SERIAL_PORT, 115200, timeout=READ_TIMEOUT) as ser:
+            with serial.Serial(port, 115200, timeout=READ_TIMEOUT) as ser:
                 ser.reset_input_buffer()
                 ser.write(b"READ\n")
                 line = ser.readline().decode(errors="ignore").strip()

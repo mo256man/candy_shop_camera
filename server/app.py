@@ -220,8 +220,9 @@ if __name__ == "__main__":
   if args.camera_id is not None:
     try:
       camera.initialize(args.camera_id)
+      config.is_running = True
       config.ready_record = True
-      print(f"[APP] Auto-start with camera_id={args.camera_id}, ready_record=True")
+      print(f"[APP] Auto-start with camera_id={args.camera_id}, is_running=True, ready_record=True")
     except Exception as e:
       print(f"[APP] Failed to auto-initialize camera {args.camera_id}: {e}", flush=True)
 

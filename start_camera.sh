@@ -33,8 +33,10 @@ fi
 # 終了時に子プロセス（Flask / Vite）をまとめて停止する
 cleanup() {
   echo "[start_camera] Shutting down child processes..."
-  # 自分のプロセスグループ全体に TERM を送る
-  kill -- -$$ 2>/dev/null || true
+  # 再帰呼び出しを防ぐためトラップをリセット
+  trap - EXIT INT TERM
+  kill "${FLASK_PID:-}" "${VITE_PID:-}" 2>/dev/null || true
+  wait "${FLASK_PID:-}" "${VITE_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

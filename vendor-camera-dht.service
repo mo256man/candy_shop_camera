@@ -15,10 +15,10 @@ After=multi-user.target
 Type=oneshot
 
 # ---- 環境に合わせて絶対パスを書き換えてください ----
-ExecStart=/usr/bin/python3 /home/USER/vendor_camera_ts/dht_logger.py
+ExecStart=/usr/bin/python3 /home/ubuntu/candy_shop_camera/dht_logger.py
 # シリアルポートや DB の場所を変える場合は Environment で上書き可能
-# Environment=DHT_SERIAL_PORT=/dev/ttyACM0
-# Environment=DHT_DB_PATH=/home/USER/vendor_camera_ts/output/sensor.db
+Environment=DHT_SERIAL_PORT=/dev/ttyACM1
+# Environment=DHT_DB_PATH=/home/ubuntu/candy_shop_camera/output/sensor.db
 # ----------------------------------------------------
 
 StandardOutput=journal

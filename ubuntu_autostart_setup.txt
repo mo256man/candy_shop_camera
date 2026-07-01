@@ -26,23 +26,23 @@
 -----------------------------------------------------------------------------
 0. 前提
 -----------------------------------------------------------------------------
-- プロジェクトを各自のホーム配下に置きます。例: ~/vendor_camera_ts
+- プロジェクトを各自のホーム配下に置きます。例: ~/candy_shop_camera
   （別の場所に置く場合は、後述のパスをすべて読み替えてください）
 - Python の依存関係をインストール済みであること。
   venv を使う場合は server/.venv に作成しておくと start_camera.sh が自動で使います。
-    cd ~/vendor_camera_ts/server
+    cd ~/candy_shop_camera/server
     python3 -m venv .venv
     source .venv/bin/activate
     pip install flask flask-cors flask-socketio opencv-python mediapipe insightface onnxruntime numpy
 - client の依存関係をインストール済みであること。
-    cd ~/vendor_camera_ts/client
+    cd ~/candy_shop_camera/client
     npm install
 
 
 -----------------------------------------------------------------------------
 1. 起動スクリプトに実行権限を付与
 -----------------------------------------------------------------------------
-    cd ~/vendor_camera_ts
+    cd ~/candy_shop_camera
     chmod +x start_camera.sh
 
   動作確認（手動起動）:
@@ -54,9 +54,9 @@
 2. systemd ユーザーサービスを設置
 -----------------------------------------------------------------------------
     mkdir -p ~/.config/systemd/user
-    cp ~/vendor_camera_ts/vendor-camera.service ~/.config/systemd/user/
+    cp ~/candy_shop_camera/vendor-camera.service ~/.config/systemd/user/
 
-  ※ vendor-camera.service 内のパス（%h/vendor_camera_ts）と CAMERA_ID を、
+  ※ vendor-camera.service 内のパス（%h/candy_shop_camera）と CAMERA_ID を、
     実際の設置場所・使用カメラに合わせて編集してください。
     %h はログインユーザーのホームディレクトリに展開されます。
 
@@ -109,6 +109,16 @@
     systemctl --user disable vendor-camera.service    # 自動起動を無効化
 
 
+-----------------------------------------------------------------------------
+登録済みサービスの変更
+-----------------------------------------------------------------------------
+    nano ~/.config/systemd/user/vendor-camera.service
+
+  編集後は以下で反映:
+    systemctl --user daemon-reload
+    systemctl --user restart vendor-camera.service
+
+
 =============================================================================
  電源オフ（Raspberry Pi Pico からの信号でシャットダウン）
 =============================================================================
@@ -144,10 +154,10 @@ B. Ubuntu(NUC) 側 - リスナーの設置
        sudo apt install python3-evdev
 
   2. systemd システムサービスを設置（リスナーは root 権限が必要）:
-       sudo cp ~/vendor_camera_ts/vendor-camera-shutdown.service /etc/systemd/system/
+       sudo cp ~/candy_shop_camera/vendor-camera-shutdown.service /etc/systemd/system/
 
      ※ vendor-camera-shutdown.service 内の ExecStart のパス
-       (/home/USER/vendor_camera_ts/shutdown_listener.py) を、
+       (/home/USER/candy_shop_camera/shutdown_listener.py) を、
        実際の設置場所・ユーザー名に書き換えてください。
 
   3. 有効化して起動:
@@ -171,6 +181,16 @@ B. Ubuntu(NUC) 側 - リスナーの設置
     競合する場合は、設定 > キーボード で該当ショートカットを無効化するか、
     pico_shutdown_button.py / shutdown_listener.py のキーを別の組み合わせに
     変更してください（例: Ctrl+Alt+Q など）。
+
+
+-----------------------------------------------------------------------------
+登録済みサービスの変更
+-----------------------------------------------------------------------------
+    sudo nano /etc/systemd/system/vendor-camera-shutdown.service
+
+  編集後は以下で反映:
+    sudo systemctl daemon-reload
+    sudo systemctl restart vendor-camera-shutdown.service
 =============================================================================
 
 
@@ -209,14 +229,14 @@ B. PC(Ubuntu) 側
        sudo apt install python3-serial
 
   2. 手動で動作確認:
-       python3 ~/vendor_camera_ts/dht_logger.py
+       python3 ~/candy_shop_camera/dht_logger.py
      "[dht_logger] Recorded: ..." が出れば OK。
      ポートが /dev/ttyACM0 以外なら環境変数で指定:
-       DHT_SERIAL_PORT=/dev/ttyACM1 python3 ~/vendor_camera_ts/dht_logger.py
+       DHT_SERIAL_PORT=/dev/ttyACM1 python3 ~/candy_shop_camera/dht_logger.py
 
   3. systemd の service と timer を設置:
-       sudo cp ~/vendor_camera_ts/vendor-camera-dht.service /etc/systemd/system/
-       sudo cp ~/vendor_camera_ts/vendor-camera-dht.timer  /etc/systemd/system/
+       sudo cp ~/candy_shop_camera/vendor-camera-dht.service /etc/systemd/system/
+       sudo cp ~/candy_shop_camera/vendor-camera-dht.timer  /etc/systemd/system/
 
      ※ vendor-camera-dht.service の ExecStart のパス（と必要なら
        DHT_SERIAL_PORT / DHT_DB_PATH）を実環境に合わせて編集してください。
@@ -228,7 +248,7 @@ B. PC(Ubuntu) 側
   5. 確認:
        systemctl list-timers vendor-camera-dht.timer
        sudo journalctl -u vendor-camera-dht.service -f
-       sqlite3 ~/vendor_camera_ts/output/sensor.db "SELECT * FROM sensor ORDER BY datetime DESC LIMIT 5;"
+       sqlite3 ~/candy_shop_camera/output/sensor.db "SELECT * FROM sensor ORDER BY datetime DESC LIMIT 5;"
 
 
 -----------------------------------------------------------------------------
@@ -240,4 +260,15 @@ B. PC(Ubuntu) 側
     udev ルールでシンボリックリンク（例 /dev/dht）を作って指定してください。
   - DHT11 は精度が低い（±2℃ / ±5%RH）ため、用途次第で DHT22 を推奨。
     その場合は pico_shutdown_dht.py の DHT_TYPE を "DHT22" に変更。
+
+
+-----------------------------------------------------------------------------
+登録済みサービス・タイマーの変更
+-----------------------------------------------------------------------------
+    sudo nano /etc/systemd/system/vendor-camera-dht.service
+    sudo nano /etc/systemd/system/vendor-camera-dht.timer
+
+  編集後は以下で反映:
+    sudo systemctl daemon-reload
+    sudo systemctl restart vendor-camera-dht.timer
 =============================================================================
