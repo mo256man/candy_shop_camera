@@ -1,14 +1,16 @@
 # =============================================================================
 # 駄菓子屋さんカメラ - systemd ユーザーサービス
 # -----------------------------------------------------------------------------
-# ユーザーがログインしたときに自動で start_camera.sh を起動します。
-# （ユーザーサービスはログイン時に開始され、ログアウト時に停止します）
-#
-# 設置・有効化の手順は ubuntu_autostart_setup.txt を参照してください。
+# 自動で start_camera.sh を起動します。
+# モニター（GUI セッション）に依存しないヘッドレス構成に対応しています。
+#   - graphical-session.target に依存しないため、モニター未接続でも起動します。
+#   - ブート直後（ログイン前）から常駐させるには linger を有効化してください:
+#         sudo loginctl enable-linger $USER
+#     （手順は ubuntu_autostart_setup.txt を参照）
 # =============================================================================
 [Unit]
 Description=Dagashiya Camera (Flask + Vite) auto start
-After=graphical-session.target network-online.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
@@ -19,7 +21,9 @@ Type=simple
 WorkingDirectory=%h/vendor_camera_ts
 # 起動スクリプト（CAMERA_ID は必要に応じて変更）
 Environment=CAMERA_ID=2
-ExecStart=/usr/bin/env bash %h/vendor_camera_ts/start_camera.sh
+# ログインシェル(-l)で実行することで ~/.profile / ~/.bashrc が読み込まれ、
+# nvm でインストールした node/npm が PATH に入る（npm not found を防ぐ）。
+ExecStart=/usr/bin/env bash -lc '%h/vendor_camera_ts/start_camera.sh'
 # -----------------------------------------
 
 # 異常終了したら自動で再起動

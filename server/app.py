@@ -8,7 +8,7 @@ import cv2
 import time
 from flask_socketio import SocketIO
 from myCamera import Camera
-from myDatabase import insert_camera_row, get_camera_records, delete_record
+from myDatabase import insert_camera_row, get_camera_records, delete_record, get_record_dates
 
 # グローバル終了フラグ
 stop_flag = threading.Event()
@@ -172,6 +172,15 @@ def get_records():
   dt_str = data.get("date", "")
   records = get_camera_records(dt_str)
   return jsonify({"records": records})
+
+
+@app.route("/api/get_record_dates", methods=["POST"])
+def get_record_dates_api():
+  """データが存在する日付の一覧を取得"""
+  data = request.get_json(silent=True) or {}
+  month_str = data.get("month", "")
+  dates = get_record_dates(month_str)
+  return jsonify({"dates": dates})
 
 
 @app.route("/api/delete_record", methods=["POST"])

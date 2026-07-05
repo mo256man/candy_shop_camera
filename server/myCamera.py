@@ -9,7 +9,7 @@ from urllib.parse import quote
 from datetime import datetime
 # from myDeepFace import analyze_face
 from myInsightFace import analyze_face
-from myVideo import get_video_duration_seconds, generate_thumbnail
+from myVideo import get_video_duration_seconds, generate_thumbnail, save_thumbnail_from_frame
 from myDatabase import insert_camera_row, OUTPUT_DIR, TEMP_PATH, THUMB_SCALE
 
 # MediaPipe処理用スケール（小さいほど軽い）
@@ -60,6 +60,8 @@ class Camera:
     self.max_face_area = 0
     self.result_age = None
     self.result_gender = None
+    # 最大面積の顔が写ったフレーム（カメラサイズのまま保持し、録画終了時に縮小してサムネイル化）
+    self.best_thumb_frame = None
 
     self.is_ai_available = config.is_ai_available
     if self.is_ai_available:
@@ -191,19 +193,16 @@ class Camera:
           self.estimator.process_frame(small)
           # draw_landmarksには元のframeを渡す（正規化座標なので元サイズのROIが得られる）
           frame, face_roi = self.estimator.draw_landmarks(frame)
+          send_to_insightface = False
           if face_roi is not None:
             self.is_found = True
             x1, y1, x2, y2 = face_roi
-            # InsightFaceスレッドへROIと面積を投げる（間隔制限付き・ノンブロッキング）
+            # InsightFace呼び出しは間隔制限付き。モザイク前のクリーンな顔ROIを切り出す
             now_t = time.perf_counter()
             if now_t - self.last_deepface_time >= DEEPFACE_INTERVAL:
               roi = frame[y1:y2, x1:x2].copy()
               area = (x2 - x1) * (y2 - y1)
-              try:
-                self.deepface_queue.put_nowait((roi, area))
-                self.last_deepface_time = now_t
-              except queue.Full:
-                pass  # InsightFace処理中 → スキップ
+              send_to_insightface = True
 
             # テキストは現在採用している（最大面積の）結果で描画
             cur_age = self.result_age
@@ -216,6 +215,21 @@ class Camera:
           # フレーム全体から複数の顔を検出し、録画・表示の直前にモザイクをかける
           # （InsightFace用ROIは上で取得済みのため、年齢・性別推定には影響しない）
           self.face_mosaic.apply(frame)
+
+          # モザイク処理の後に顔ROIの赤枠を描画する
+          if face_roi is not None:
+            x1, y1, x2, y2 = face_roi
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+
+          # InsightFaceスレッドへ渡す（間隔制限付き・ノンブロッキング）。
+          # サムネイル候補としてモザイク適用後のフレームを同梱し、最大面積の顔が
+          # 推論できたタイミングでサムネイルも更新する
+          if send_to_insightface:
+            try:
+              self.deepface_queue.put_nowait((roi, area, frame.copy()))
+              self.last_deepface_time = now_t
+            except queue.Full:
+              pass  # InsightFace処理中 → スキップ
         # print("人検知", self.is_found, flush=True)
 
         # 録画処理
@@ -238,15 +252,17 @@ class Camera:
     """InsightFace専用スレッド：キューからROIを受け取り解析する"""
     while not self.stop_event.is_set():
       try:
-        roi, area = self.deepface_queue.get(timeout=0.5)
+        roi, area, frame = self.deepface_queue.get(timeout=0.5)
       except queue.Empty:
         continue
       ret, age, gender = analyze_face(roi)
       # これまでの最大面積より大きい顔が推論できたときだけ年齢・性別を更新する
+      # 同じタイミングでサムネイル候補フレーム（カメラサイズのまま）も更新する
       if ret and area > self.max_face_area:
         self.max_face_area = area
         self.result_age = age
         self.result_gender = gender
+        self.best_thumb_frame = frame
 
   def _get_and_process_frame(self):
     """フレーム取得、回転、時計追加"""
@@ -324,6 +340,7 @@ class Camera:
     self.max_face_area = 0
     self.result_age = None
     self.result_gender = None
+    self.best_thumb_frame = None
     
     # ディレクトリ作成
     if not os.path.exists(OUTPUT_DIR):
@@ -393,7 +410,12 @@ class Camera:
     else:
       thumb_w = self.width
       thumb_h = self.height
-    generate_thumbnail(TEMP_PATH, thumb_path, THUMB_SCALE, thumb_w, thumb_h)
+    # 最大面積の顔が写ったフレーム（カメラサイズのまま保持）をサムネイル用に縮小して保存する。
+    # 顔が一度も推論できなかった場合は従来どおり動画中央フレームから生成する
+    if self.best_thumb_frame is not None:
+      save_thumbnail_from_frame(self.best_thumb_frame, thumb_path, THUMB_SCALE, thumb_w, thumb_h)
+    else:
+      generate_thumbnail(TEMP_PATH, thumb_path, THUMB_SCALE, thumb_w, thumb_h)
     print(f"[Recording] Thumbnail saved: {thumb_path}", flush=True)
     
     # 動画を保存（Linuxはffmpegでmp4v→H.264に再エンコードしてブラウザ再生に対応）

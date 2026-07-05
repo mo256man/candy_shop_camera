@@ -39,6 +39,25 @@ def get_camera_records(dt_str = ""):
     finally:
         con.close()
 
+def get_record_dates(month_str=""):
+    """データが存在する日付の一覧を取得（YYYY-MM-DD形式のリスト）
+
+    month_str: "YYYY-MM" を指定するとその月のみに絞り込む
+    """
+    con = sqlite3.connect(DB_PATH)
+    try:
+        cur = con.cursor()
+        if month_str:
+            sql = "SELECT DISTINCT substr(datetime, 1, 10) FROM camera WHERE datetime LIKE ?"
+            cur.execute(sql, (f'{month_str}%',))
+        else:
+            sql = "SELECT DISTINCT substr(datetime, 1, 10) FROM camera"
+            cur.execute(sql)
+        rows = cur.fetchall()
+        return [row[0] for row in rows if row[0]]
+    finally:
+        con.close()
+
 def delete_record(filename):
   """DBから録画記録を削除"""
   con = sqlite3.connect(DB_PATH)

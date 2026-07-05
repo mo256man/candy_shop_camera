@@ -168,7 +168,7 @@ class PoseEstimator:
       return annotated_image, face_roi
 
     x1, y1, x2, y2 = int(x_min * w), int(y_min * h), int(x_max * w), int(y_max * h)
-    cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
+    # 赤枠はモザイク処理後に呼び出し側で描画する（モザイクで潰れるのを防ぐため、ここでは描かない）
     face_roi = (x1, y1, x2, y2)
     return annotated_image, face_roi
 

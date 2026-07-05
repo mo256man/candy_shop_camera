@@ -61,3 +61,14 @@ def generate_thumbnail(video_path, output_path, thumb_scale, cam_w, cam_h):
     thumb = cv2.resize(frame, (tw, th))
     cv2.imwrite(output_path, thumb)
     return True
+
+
+def save_thumbnail_from_frame(frame, output_path, thumb_scale, cam_w, cam_h):
+    """既に取得済みのフレーム（カメラサイズ）をサムネイル用サイズに縮小して保存"""
+    if frame is None:
+        return False
+    tw = int(cam_w * thumb_scale)
+    th = int(cam_h * thumb_scale)
+    thumb = cv2.resize(frame, (tw, th))
+    cv2.imwrite(output_path, thumb)
+    return True

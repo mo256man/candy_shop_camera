@@ -2,7 +2,7 @@
 # Raspberry Pi Pico - シャットダウンボタン + DHT温湿度センサー
 #   (MicroPython / USB 複合デバイス: HID Keyboard + CDC Serial)
 # -----------------------------------------------------------------------------
-# 機能1) シャットダウンボタン（スイッチのみ / LED なし）
+# 機能1) シャットダウンボタン
 #   - ボタンが 1 秒以上オンになったら USB キーボードとして Ctrl+Alt+S を送信
 #
 # 機能2) DHT 温湿度センサー（PC からの要求で測定して返す）
@@ -19,16 +19,9 @@
 #   - このファイルを Pico に main.py として保存すると、通電で自動実行されます。
 #
 # 配線（スイッチと DHT をケースの小穴から外に出す想定 / 4線）:
-#   Pico 左下の物理ピン 17〜20 を使用する。
-#
-#   物理ピン17 (GP13) ── 常時 HIGH ── DHT VCC（3V3 代わりに GPIO 出力）
-#   物理ピン18 (GND)  ── DHT GND と スイッチの片側（共通）
-#   物理ピン19 (GP14) ── スイッチ接点（押すと GND に落ちる）
-#   物理ピン20 (GP15) ── DHT DATA（4.7〜10kΩ で VCC へプルアップ。モジュール版は実装済み）
-#
-#   外に出る線は 4 本: VCC(GP13) / GND / BUTTON(GP14) / DHT DATA(GP15)
+#   外に出る線は 4 本: VCC / GND / BUTTON / DHT DATA
 #   ※ スイッチは GND に落とす配線なので ACTIVE_HIGH = False
-#   ※ DATA のプルアップは GP13(VCC) に対して入れる
+#   ※ DATA のプルアップは VCC に対して入れる
 # =============================================================================
 
 import time
@@ -39,19 +32,19 @@ from usb.device.keyboard import KeyboardInterface, KeyCode
 from usb.device.cdc import CDCInterface
 
 # ---- 設定（環境に合わせて変更）----
-DHT_PWR_PIN = 13         # 物理ピン17 / GP13。常時 HIGH にして DHT の VCC として使う
-BUTTON_PIN = 14          # 物理ピン19 / GP14。スイッチ接点
-DHT_PIN = 15             # 物理ピン20 / GP15。DHT DATA
-ACTIVE_HIGH = False      # スイッチを GND に落とす配線なので False
+BUTTON_PIN = 19         # 物理ピン25 / GP19。スイッチ接点
+DHT_PIN = 18            # 物理ピン24 / GP18。DHT DATA
+ACTIVE_HIGH = False     # スイッチを GND に落とす配線
 HOLD_SECONDS = 1.0       # この秒数以上オンが続いたら送信
 POLL_MS = 20             # メインループ周期(ms)
 DHT_TYPE = "DHT11"       # "DHT11" または "DHT22"（精度を上げるなら DHT22 推奨）
 # ----------------------------------
 
-# DHT の電源ピン（GP13 を常時 HIGH 出力 = 3.3V 供給）
-dht_pwr = Pin(DHT_PWR_PIN, Pin.OUT)
-dht_pwr.on()
 time.sleep_ms(1000)  # センサー電源投入後の安定待ち
+
+# LED準備
+led = Pin("LED", Pin.OUT)
+led.off()
 
 # 入力ピン設定（ACTIVE_HIGH なら PULL_DOWN、ACTIVE_LOW なら PULL_UP）
 if ACTIVE_HIGH:
@@ -79,6 +72,9 @@ usb.device.get().init(keyboard, cdc, builtin_driver=True)
 # ホスト(PC)が両インターフェースを認識するまで待つ
 while not (keyboard.is_open() and cdc.is_open()):
     time.sleep_ms(100)
+
+# すべての準備完了
+led.on()
 
 
 def send_ctrl_alt_s():
