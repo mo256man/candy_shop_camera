@@ -73,6 +73,9 @@ class Camera:
       self.face_mosaic = None
     self.is_found = False
     self.last_found_time = None
+    self.first_found_time = None  # 検知開始時刻
+    self.min_detection_duration = 0.5  # 最小検知時間（秒）。これ未満なら幻として無視
+    self.valid_detection = False  # 現在の検知セッションが有効か
     self.last_deepface_time = 0.0
     
     # 一定FPSで走らせるための設定
@@ -301,16 +304,26 @@ class Camera:
     """録画状態チェックと録画フレーム書き込み"""
     now = time.perf_counter()
 
-    # 人検知時は最終検知時刻を更新し、録画中でなければ録画開始
+    # 人検知時は最終検知時刻を更新し、初回検知時刻も記録。録画中でなければ録画開始
     if self.config.ready_record and self.is_found:
+      if self.first_found_time is None:
+        self.first_found_time = now  # 検知開始時刻を記録
       self.last_found_time = now
       if not self.config.is_recording:
         self.config.is_recording = True
 
-    # 人未検知が3秒継続したら録画終了
+    # 人未検知が一定時間継続したら録画終了
+    # さらに、検知セッション全体の長さが最小検知時間未満なら、その検知は無効（幻）と判定
     if self.config.is_recording and not self.is_found:
-      if self.last_found_time is not None and now - self.last_found_time >= 3.0:
+      if self.last_found_time is not None and now - self.last_found_time >= 2.0:
+        # 検知セッション全体の長さを計算
+        if self.first_found_time is not None:
+          detection_duration = self.last_found_time - self.first_found_time
+          self.valid_detection = detection_duration >= self.min_detection_duration
+        else:
+          self.valid_detection = False
         self.config.is_recording = False
+        self.first_found_time = None
 
     # 録画状態の遷移をチェック
     current_recording = self.config.is_recording
@@ -341,6 +354,9 @@ class Camera:
     self.result_age = None
     self.result_gender = None
     self.best_thumb_frame = None
+    
+    # 検知セッションの有効性フラグをリセット
+    self.valid_detection = False
     
     # ディレクトリ作成
     if not os.path.exists(OUTPUT_DIR):
@@ -437,11 +453,20 @@ class Camera:
     duration = get_video_duration_seconds(target, self.target_fps)
     duration = round(duration, 1)
     
-    # DB登録
-    dt_str = self.config.record_start_dt.strftime('%Y-%m-%d %H:%M:%S')
-    gender = self.result_gender if self.result_gender is not None else "NA"  # 最大面積の顔の性別
-    age = round(self.result_age, 1) if self.result_age is not None else 0.0  # 最大面積の顔の年齢（小数一位まで）
-    insert_camera_row(dt_str, filename_base, duration, gender, age)
-    print(f"[Recording] DB registered: {filename_base} ({gender}, {age})", flush=True)
+    # DB登録（検知セッションが有効な場合のみ）
+    if self.valid_detection:
+      dt_str = self.config.record_start_dt.strftime('%Y-%m-%d %H:%M:%S')
+      gender = self.result_gender if self.result_gender is not None else "NA"  # 最大面積の顔の性別
+      age = round(self.result_age, 1) if self.result_age is not None else 0.0  # 最大面積の顔の年齢（小数一位まで）
+      insert_camera_row(dt_str, filename_base, duration, gender, age)
+      print(f"[Recording] DB registered: {filename_base} ({gender}, {age})", flush=True)
+    else:
+      print(f"[Recording] Detection duration too short ({duration}s < {self.min_detection_duration}s). Skipped DB registration.", flush=True)
+      # ファイルを削除
+      if os.path.exists(target):
+        os.remove(target)
+      if os.path.exists(thumb_path):
+        os.remove(thumb_path)
+      print(f"[Recording] Files deleted (invalid detection session).", flush=True)
     
     self.config.clear_recording_state()

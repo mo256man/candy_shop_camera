@@ -92,6 +92,18 @@ class PoseEstimator:
   def close(self):
     self.landmarker.close()
 
+  # ランドマークの信頼度をチェック（有効な割合で判定）
+  def is_valid_pose(self, pose_landmarks, min_valid_ratio=0.8):
+    """有効なランドマークが指定比率以上あるか確認
+    Args:
+      pose_landmarks: ランドマークリスト
+      min_valid_ratio: 有効ランドマークの最小比率（デフォルト0.8 = 80%以上）
+    Returns:
+      bool: 有効ランドマークが比率以上の場合True
+    """
+    valid_count = sum(1 for lm in pose_landmarks if lm.visibility > 0.5)
+    return valid_count / len(pose_landmarks) >= min_valid_ratio
+
   # 顔のROIを骨格推定から算出する
   def get_face_roi(self, pose_landmarks):
     lm_nose = pose_landmarks[0]         # 鼻
@@ -140,6 +152,10 @@ class PoseEstimator:
     torso_height = (lm_l_hip.y + lm_r_hip.y - lm_l_shoulder.y - lm_r_shoulder.y) / 2
     # print(f"torsoheight: {torso_height:.3f}, threshold: {threshold_height:.3f}, {torso_height < threshold_height}")
     if torso_height < threshold_height:
+      return image, None
+
+    # ランドマーク信頼度チェック: 有効なランドマークが80%以上あるか確認
+    if not self.is_valid_pose(pose_landmarks, min_valid_ratio=0.8):
       return image, None
 
     coords = np.array([[lm.x, lm.y] for lm in pose_landmarks])
