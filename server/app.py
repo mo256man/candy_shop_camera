@@ -2,13 +2,15 @@ isMediaPipeAvailable = True
 
 import os
 import threading
+import random
+import datetime
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 import cv2
 import time
 from flask_socketio import SocketIO
 from myCamera import Camera
-from myDatabase import insert_camera_row, get_camera_records, delete_record, get_record_dates
+from myDatabase import insert_camera_row, get_camera_records, delete_record, get_record_dates, insert_environment_row, get_environment_records
 
 # グローバル終了フラグ
 stop_flag = threading.Event()
@@ -69,6 +71,30 @@ def _on_recording_change(value):
   socketio.emit('status_update', {'is_recording': value})
 
 config.on_recording_change = _on_recording_change
+
+
+def _environment_recorder_loop():
+  """毎時 0, 10, 20, 30, 40, 50 分に温度・湿度をランダムに生成してDBへ記録する
+
+  温度センサーが未実装のため、温度は 20.0〜40.0 の範囲で小数第一位まで、
+  湿度は 0〜99 の範囲の整数値でランダムに決定する。
+  """
+  last_recorded_minute_mark = None
+  while not stop_flag.is_set():
+    now = datetime.datetime.now()
+    if now.minute % 10 == 0:
+      minute_mark = now.strftime("%Y-%m-%d %H:%M")
+      if minute_mark != last_recorded_minute_mark:
+        temperature = round(random.uniform(20.0, 40.0), 1)
+        humidity = random.randint(0, 99)
+        dt_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+          insert_environment_row(dt_str, temperature, humidity)
+          print(f"[ENV] Recorded temperature={temperature}, humidity={humidity} at {dt_str}")
+        except Exception as e:
+          print(f"[ENV] Failed to record environment: {e}")
+        last_recorded_minute_mark = minute_mark
+    stop_flag.wait(1)
 
 
 def _generate_frames():
@@ -183,6 +209,15 @@ def get_record_dates_api():
   return jsonify({"dates": dates})
 
 
+@app.route("/api/get_environment_records", methods=["POST"])
+def get_environment_records_api():
+  """指定した日付の温度・湿度記録を取得"""
+  data = request.get_json()
+  dt_str = data.get("date", "")
+  records = get_environment_records(dt_str)
+  return jsonify({"records": records})
+
+
 @app.route("/api/delete_record", methods=["POST"])
 def del_record():
   """録画記録を削除"""
@@ -235,6 +270,9 @@ if __name__ == "__main__":
     except Exception as e:
       print(f"[APP] Failed to auto-initialize camera {args.camera_id}: {e}", flush=True)
 
+  env_thread = threading.Thread(target=_environment_recorder_loop, daemon=True)
+  env_thread.start()
+
   print(app.url_map)
   try:
     socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)
@@ -246,4 +284,6 @@ if __name__ == "__main__":
     traceback.print_exc()
   finally:
     print("\n[APP] Shutting down...", flush=True)
+    stop_flag.set()
+    env_thread.join(timeout=3.0)
     os._exit(0)

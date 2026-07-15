@@ -46,12 +46,10 @@ trap cleanup EXIT INT TERM
 # ブラウザ起動関数
 start_browser() {
   local browser_cmd=""
-  if command -v google-chrome &> /dev/null; then
-    browser_cmd="google-chrome"
-  elif command -v chromium-browser &> /dev/null; then
-    browser_cmd="chromium-browser"
+  if command -v firefox &> /dev/null; then
+    browser_cmd="firefox"
   else
-    echo "[start_camera] Warning: Chrome/Chromium not found. Skipping browser startup."
+    echo "[start_camera] Warning: Firefox not found. Skipping browser startup."
     return
   fi
   

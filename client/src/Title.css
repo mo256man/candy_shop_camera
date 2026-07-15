@@ -59,7 +59,7 @@ img.kanbanImage {
 
 .btnMenu {
   width: 600px;
-  height: 80px;
+  height: 70px;
   font-size: 32px;
   font-family: 'kanbanFont', sans-serif;
   border: none;
@@ -84,6 +84,11 @@ img.kanbanImage {
 
 .colorAnalysis {
   background-color: #ff9800;
+  color: white;
+}
+
+.colorEnvironment {
+  background-color: #4caf50;
   color: white;
 }
 

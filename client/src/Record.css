@@ -125,3 +125,27 @@ table.videoInfo td:nth-child(1) {
 table.videoInfo td:nth-child(2) {
   padding-left: 10px;
 }
+
+.recordDate {
+  font-size: 20px;
+  color: #666;
+  margin: 0 5px;
+}
+
+.recordCount {
+  font-size: 20px;
+  color: #666;
+  margin: 0 5px;
+}
+
+.sortBtn {
+  font-size: 20px;
+  font-weight: bold;
+  color: #666;
+  border: gray 2px solid;
+  border-radius: 5px;
+  padding: 2px 8px;
+  margin: 0 5px;
+  cursor: pointer;
+  user-select: none;
+}

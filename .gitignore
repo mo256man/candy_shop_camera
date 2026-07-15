@@ -1,6 +1,9 @@
 # Output files (recorded videos, thumbnails, etc.)
 output/
 
+# Snapshots
+snapshot/
+
 # Models
 server/models/
 

@@ -12,6 +12,9 @@ from myInsightFace import analyze_face
 from myVideo import get_video_duration_seconds, generate_thumbnail, save_thumbnail_from_frame
 from myDatabase import insert_camera_row, OUTPUT_DIR, TEMP_PATH, THUMB_SCALE
 
+# スナップショット保存先（毎時0分に1枚保存）
+SNAPSHOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'snapshot'))
+
 # MediaPipe処理用スケール（小さいほど軽い）
 MEDIAPIPE_SCALE = 0.5
 # InsightFace呼び出し間隔（秒）
@@ -38,7 +41,7 @@ CAMERAS = [
   {
     "source": f"rtsp://{username}:{pwd_enc}@192.168.4.245/axis-media/media.amp",
     "backend": cv2.CAP_FFMPEG,
-    "rotate": cv2.ROTATE_90_COUNTERCLOCKWISE,
+    "rotate": None,
     "width": 1280,
     "height": 720,
   }
@@ -77,6 +80,7 @@ class Camera:
     self.min_detection_duration = 0.5  # 最小検知時間（秒）。これ未満なら幻として無視
     self.valid_detection = False  # 現在の検知セッションが有効か
     self.last_deepface_time = 0.0
+    self.last_snapshot_hour = -1  # 最後にスナップショットを保存した時刻（hour）
     
     # 一定FPSで走らせるための設定
     self.target_fps = 15.0
@@ -287,9 +291,20 @@ class Camera:
       frame = cv2.rotate(frame, self.rotate)
 
     # 時計を追加
-    clock = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_dt = datetime.now()
+    clock = now_dt.strftime("%Y-%m-%d %H:%M:%S")
     cv2.rectangle(frame, (0, 0), (frame.shape[1]-1, 35), (0, 0, 0), -1)
     cv2.putText(frame, clock, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
+    # 毎時0分に1枚スナップショットを保存（秒は強制的に00とする）
+    if now_dt.minute == 0 and now_dt.hour != self.last_snapshot_hour:
+      self.last_snapshot_hour = now_dt.hour
+      snap_dt = now_dt.replace(minute=0, second=0, microsecond=0)
+      snap_filename = snap_dt.strftime('%Y%m%d_%H%M%S') + '.jpg'
+      snap_path = os.path.join(SNAPSHOT_DIR, snap_filename)
+      os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+      cv2.imwrite(snap_path, frame)
+      print(f"[Snapshot] Saved: {snap_path}", flush=True)
 
     return True, frame
 

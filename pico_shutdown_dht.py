@@ -2,7 +2,7 @@
 # Raspberry Pi Pico - シャットダウンボタン + DHT温湿度センサー
 #   (MicroPython / USB 複合デバイス: HID Keyboard + CDC Serial)
 # -----------------------------------------------------------------------------
-# 機能1) シャットダウンボタン
+# 機能1) シャットダウンボタン（スイッチのみ / LED なし）
 #   - ボタンが 1 秒以上オンになったら USB キーボードとして Ctrl+Alt+S を送信
 #
 # 機能2) DHT 温湿度センサー（PC からの要求で測定して返す）
@@ -19,32 +19,27 @@
 #   - このファイルを Pico に main.py として保存すると、通電で自動実行されます。
 #
 # 配線（スイッチと DHT をケースの小穴から外に出す想定 / 4線）:
-#   外に出る線は 4 本: VCC / GND / BUTTON / DHT DATA
+#
+#   外に出る線は 4 本: VCC(GP13) / GND / BUTTON(GP14) / DHT DATA(GP15)
 #   ※ スイッチは GND に落とす配線なので ACTIVE_HIGH = False
-#   ※ DATA のプルアップは VCC に対して入れる
+#   ※ DATA のプルアップは GP13(VCC) に対して入れる
 # =============================================================================
 
 import time
-from machine import Pin
+from machine import Pin, LED
 import dht
 import usb.device
 from usb.device.keyboard import KeyboardInterface, KeyCode
 from usb.device.cdc import CDCInterface
 
 # ---- 設定（環境に合わせて変更）----
-BUTTON_PIN = 19         # 物理ピン25 / GP19。スイッチ接点
-DHT_PIN = 18            # 物理ピン24 / GP18。DHT DATA
+BUTTON_PIN = 19         # スイッチ接点
+DHT_PIN = 18            # DHT DATA
 ACTIVE_HIGH = False     # スイッチを GND に落とす配線
-HOLD_SECONDS = 1.0       # この秒数以上オンが続いたら送信
+HOLD_SECONDS = 3.0       # この秒数以上オンが続いたら送信
 POLL_MS = 20             # メインループ周期(ms)
 DHT_TYPE = "DHT11"       # "DHT11" または "DHT22"（精度を上げるなら DHT22 推奨）
 # ----------------------------------
-
-time.sleep_ms(1000)  # センサー電源投入後の安定待ち
-
-# LED準備
-led = Pin("LED", Pin.OUT)
-led.off()
 
 # 入力ピン設定（ACTIVE_HIGH なら PULL_DOWN、ACTIVE_LOW なら PULL_UP）
 if ACTIVE_HIGH:
@@ -73,8 +68,14 @@ usb.device.get().init(keyboard, cdc, builtin_driver=True)
 while not (keyboard.is_open() and cdc.is_open()):
     time.sleep_ms(100)
 
-# すべての準備完了
+# 準備完了。内臓 LED を点灯
+led = LED()
 led.on()
+
+# LED 点滅用変数
+led_state = False       # LED の現在の状態（ON/OFF）
+led_toggle_time = 0     # LED 切り替え時刻(ms)
+LED_TOGGLE_INTERVAL = 500  # LED 切り替え周期(ms)
 
 
 def send_ctrl_alt_s():
@@ -133,13 +134,23 @@ while True:
 
     # --- シャットダウンボタン ---
     if is_pressed():
+        # ボタン押下中は LED を点滅させる
+        current_time = time.ticks_ms()
+        if time.ticks_diff(current_time, led_toggle_time) >= LED_TOGGLE_INTERVAL:
+            led_state = not led_state
+            led.on() if led_state else led.off()
+            led_toggle_time = current_time
+        
         if press_start is None:
             press_start = time.ticks_ms()
         elif not sent and time.ticks_diff(time.ticks_ms(), press_start) >= int(HOLD_SECONDS * 1000):
             send_ctrl_alt_s()
             sent = True   # 離すまで再送しない
     else:
-        # 非押下: 状態リセット
+        # 非押下: LED をOFF にして状態リセット
+        led.off()
+        led_state = False
+        led_toggle_time = 0
         press_start = None
         sent = False
 

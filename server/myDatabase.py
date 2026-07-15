@@ -7,7 +7,8 @@ base_dir = os.path.dirname(__file__)
 output_path = os.path.join(base_dir, '..', 'output')
 OUTPUT_DIR = os.path.abspath(output_path)
 TEMP_PATH = os.path.join(OUTPUT_DIR, '_recording_temp.mp4')
-DB_PATH = os.path.join(OUTPUT_DIR, 'dagashi_camera.sqlite')
+DB_PATH = os.path.join(OUTPUT_DIR, '_camera.sqlite')
+ENV_DB_PATH = os.path.join(OUTPUT_DIR, '_environment.sqlite')
 THUMB_SCALE = 0.5
 
 
@@ -79,3 +80,31 @@ def delete_record(filename):
     os.remove(thumb_path)
   else:
     print(f"Warning: Thumbnail file {thumb_path} not found for deletion.")
+
+def insert_environment_row(dt_str, temperature, humidity):
+    """DBに温度・湿度を登録"""
+    con = sqlite3.connect(ENV_DB_PATH)
+    try:
+        cur = con.cursor()
+        sql = "INSERT INTO environment(datetime, temperature, humidity) VALUES (?, ?, ?)"
+        cur.execute(sql, (dt_str, temperature, humidity))
+        con.commit()
+    finally:
+        con.close()
+
+def get_environment_records(dt_str = ""):
+    """DBから指定日付の温度・湿度記録を取得"""
+    con = sqlite3.connect(ENV_DB_PATH)
+    con.row_factory = sqlite3.Row  # レコードを辞書のように扱う
+    try:
+        cur = con.cursor()
+        if dt_str:
+          sql = "select * from environment where datetime LIKE ? order by datetime"
+          cur.execute(sql, (f'{dt_str}%',))
+        else:
+          sql = "select * from environment order by datetime"
+          cur.execute(sql)
+        records = cur.fetchall()
+        return [dict(row) for row in records]  # 辞書のリストに変換
+    finally:
+        con.close()

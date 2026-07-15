@@ -2,21 +2,20 @@ import { useState, useEffect, useRef } from 'react'
 import { registerLocale } from "react-datepicker";
 import ja from "date-fns/locale/ja";
 import CommonDatePicker from "./CommonDatePicker"
-import { TimelyGraph } from "./TImelyGraph"
-import { genderRatioChart } from "./GenderRatioChart"
-import {agePyramidChart} from "./AgePyramidChart"
+import { createEnvironmentGraphs } from "./EnvironmentGraph"
 import "react-datepicker/dist/react-datepicker.css"
 import "./Analysis.css"
 
 registerLocale("ja", ja);
 
-type AnalysisProps = {
+type EnvironmentProps = {
   isAdmin: boolean;
   cameraId: number | null;
   isRecording: boolean;
   showTitle: () => void;
   showViewer: () => void;
   showRecord: () => void;
+  showAnalysis: () => void;
   showEnvironment: () => void;
   handleDateChange: (d: Date) => void;
   records: Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>;
@@ -24,13 +23,30 @@ type AnalysisProps = {
   isRunning: boolean;
 };
 
-export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showEnvironment, handleDateChange, records, date, isRunning }: AnalysisProps) {
-  const [analysisMode, setAnalysisMode] = useState<"time" | "count">("time");
+export default function Environment({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showAnalysis, showEnvironment, handleDateChange, records, date, isRunning }: EnvironmentProps) {
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [envRecords, setEnvRecords] = useState<Array<{ datetime: string; temperature: number; humidity: number }>>([]);
 
-  const changeAnalysisMode = (mode: "time" | "count") => {
-    setAnalysisMode(mode);
-  }
+  const getEnvironmentRecords = async (d: Date) => {
+    const strDate = d.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+    try {
+      const res = await fetch("/api/get_environment_records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: strDate })
+      });
+      const data = await res.json();
+      setEnvRecords(data.records);
+    } catch (error) {
+      console.error("Error fetching environment records:", error);
+    }
+  };
+
+  useEffect(() => {
+    getEnvironmentRecords(date);
+  }, [date]);
+
+  const { temperatureGraph, humidityGraph } = createEnvironmentGraphs(envRecords, 1000, 200);
 
   const headerPanel = (
     <div className="header">
@@ -38,7 +54,7 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
         <div className="header-icon" onClick={() => showTitle()}>🔙</div>
       </div>
       <div className="header-center">
-        <div className="header-title">分析画面</div>
+        <div className="header-title">環境画面<span style={{ color: "red" }}>（データはウソ）</span></div>
       </div>
       <div className="header-right">
         <div className="cameraControlPanel">
@@ -49,14 +65,14 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
             <div className="header-icon-disabled">📷</div>
           }
           <div className="header-icon" onClick={() => showRecord()}>👀</div>
-          <div className="header-icon-selected" >📊</div>
-          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
+          <div className="header-icon" onClick={() => showAnalysis()}>📊</div>
+          <div className="header-icon-selected">🌿</div>
         </div>
       </div>
     </div>
   );
 
-  const analysisHeader = (
+  const environmentHeader = (
     <div className="analysisHeader">
       <div className="analysisHeaderLeft">
       <div className="datepicker-container">
@@ -84,8 +100,8 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
   const graph1 = () => {
     return (
       <div className="graphContainer">
-        <div className="graphTitle">{analysisMode=== "count" ? "時間別利用回数（回）" : "時間別利用時間（秒）"}</div>
-          <TimelyGraph data={records} width={1000} height={200} analysisMode={analysisMode} />
+        <div className="graphTitle">気温</div>
+        {temperatureGraph}
       </div>
     );   
   }
@@ -93,42 +109,27 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
   const graph2 = () => {
     return (
       <div className="graphContainer">
-        <div className="graphTitle">{analysisMode === "count" ? "性別利用回数（回）" : "性別利用時間（秒）"}</div>
-        {genderRatioChart(records, analysisMode)}
+        <div className="graphTitle">湿度</div>
+        {humidityGraph}
       </div>
     );
   }
 
-  const graph3 = () => {
-    return (
-      <div className="graphContainer">
-        <div className="graphTitle">{analysisMode === "count" ? "年齢層別利用回数（回）" : "年齢層別利用時間（秒）"}</div>
-        {agePyramidChart(records, analysisMode)}
-      </div>
-    );
-  }
 
-  const analysisContent = () => {
+  const environmentContent = () => {
     return (
       <div className="analysisContent">
-        {analysisHeader}
-        <div className="analysisModeBtns">
-          <div className={`analysisModeBtn ${analysisMode === "count" ? "analysisModeBtn-active" : ""}`} onClick={()=> changeAnalysisMode("count")}>利用回数別</div>
-          <div className={`analysisModeBtn ${analysisMode === "time" ? "analysisModeBtn-active" : ""}`} onClick={()=> changeAnalysisMode("time")}>利用時間別</div>
-        </div>
+        {environmentHeader}
         <div className="graph">{graph1()}</div>
-        <div style={{ display: "flex", flexDirection: "row" }}>
-          <div className="graph">{graph2()}</div>
-          <div className="graph">{graph3()}</div>
-        </div>
+        <div className="graph">{graph2()}</div>
       </div>
     );
   }
 
   return (
-    <div className="analysisMain">
+    <div className="environmentMain">
       {headerPanel}
-      {analysisContent()}
+      {environmentContent()}
     </div>
   );
 

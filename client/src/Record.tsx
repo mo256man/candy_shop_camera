@@ -7,6 +7,7 @@ type RecordProps = {
   showTitle: () => void;
   showViewer: () => void;
   showAnalysis: () => void;
+  showEnvironment: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -63,7 +64,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
         <div className="header-icon" onClick={() => showTitle()}>🔙</div>
       </div>
       <div className="header-center">
-        <div className="header-title">お菓子屋さんカメラ データ確認画面</div>
+        <div className="header-title">データ確認画面</div>
       </div>
       <div className="header-right">
         <div className="cameraControlPanel">
@@ -81,6 +82,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
           }
           <div className="header-icon-selected" >👀</div>
           <div className="header-icon" onClick={() => showAnalysis()}>📊</div>
+          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
         </div>
       </div>
     </div>
@@ -113,8 +115,8 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
           </div>
         )}
       </div>
-      <div>選択された日付：{date.toLocaleDateString("ja-JP")}</div>
-      <div>データ件数：{records.length}件</div>
+      <div className="recordDate">{date.toLocaleDateString("ja-JP")}</div>
+      <div className="recordCount">{records.length}件</div>
       <div onClick={() => setIsAscending(!isAscending)} className="sortBtn">
         {isAscending ? "▲ 昇順" : "▼ 降順"}
       </div>
@@ -144,7 +146,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
             <div>{duration} 秒</div>
             <div className="thumbnailBtnArea">
               <div className="recordSaveBtn" onClick={() => downloadRecord(record)}>💾</div>
-              <div className="recordDeleteBtn" onClick={() => deleteRecord(record)}>❌</div>
+              {isAdmin && <div className="recordDeleteBtn" onClick={() => deleteRecord(record)}>❌</div>}
             </div>
           </div>
         )})} 

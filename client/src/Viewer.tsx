@@ -6,6 +6,7 @@ type ViewerProps = {
   showTitle: () => void;
   showRecord: () => void;
   showAnalysis: () => void;
+  showEnvironment: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -17,7 +18,7 @@ type ViewerProps = {
   sendConfig: (data: Record<string, unknown>) => void;
 };
 
-export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
+export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, showEnvironment, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
   const [showPanel, setShowPanel] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
   const previousCameraIdRef = useRef<number | null>(null);
@@ -121,6 +122,7 @@ export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, 
           }
           <div className="header-icon" onClick={() => showRecord()}>👀</div>
           <div className="header-icon" onClick={() => showAnalysis()}>📊</div>
+          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
         </div>
       </div>
     </div>

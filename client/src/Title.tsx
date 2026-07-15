@@ -7,6 +7,7 @@ type TitleProps = {
   showViewer: () => void;
   showRecord: () => void;
   showAnalysis: () => void;
+  showEnvironment: () => void;
   isAdmin: boolean;
   loginAdmin: () => void;
   logoutAdmin: () => void;
@@ -14,7 +15,7 @@ type TitleProps = {
   handleRunning: (running: boolean) => void;
 };
 
-export default function Title({ cameraId, handleCameraId, showViewer, showRecord, showAnalysis, isAdmin, loginAdmin, logoutAdmin, isRunning, handleRunning }: TitleProps) {
+export default function Title({ cameraId, handleCameraId, showViewer, showRecord, showAnalysis, showEnvironment, isAdmin, loginAdmin, logoutAdmin, isRunning, handleRunning }: TitleProps) {
   const [showAdminMenu, setShowAdminMenu] = useState<"settingBtn" | "loginArea" | "controlPanel">("settingBtn");
   const [password, setPassword] = useState<string>("");
 
@@ -34,6 +35,7 @@ export default function Title({ cameraId, handleCameraId, showViewer, showRecord
       }
       <button className="btnMenu colorRecord" onClick={showRecord}>👀 録画確認</button>
       <button className="btnMenu colorAnalysis" onClick={showAnalysis}>📊 分析結果</button>
+      <button className="btnMenu colorEnvironment" onClick={showEnvironment}>🌿 温度・湿度</button>
     </div>
   );
 

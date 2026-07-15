@@ -5,17 +5,18 @@ import Title from "./Title.tsx"
 import Viewer from "./Viewer.tsx"
 import Record from "./Record.tsx"
 import Analysis from "./Analysis.tsx"
+import Environment from "./Environment.tsx"
 
 export default function App() {
   // flaskに送り全クライアントで共有する状態
   const [cameraId, setCameraId] = useState<number>(0)
-  const [view, setView] = useState<"title" | "viewer" | "record" | "analysis">("title")
+  const [view, setView] = useState<"title" | "viewer" | "record" | "analysis" | "environment">("title")
   const [isAdmin, setIsAdmin] = useState<boolean>(false)
   const [isRunning, setIsRunning] = useState<boolean>(false)
   const [readyRecord, setReadyRecord] = useState<boolean>(false)
   const [isRecording, setIsRecording] = useState<boolean>(false)
   const [isManualRecording, setIsManualRecording] = useState(false);
-  const [isAscending, setIsAscending] = useState<boolean>(true);
+  const [isAscending, setIsAscending] = useState<boolean>(false);
 
   const showTitle = () => setView("title")
   const showViewer = () => setView("viewer")
@@ -24,6 +25,7 @@ export default function App() {
     setView("record");
   }
   const showAnalysis = () => setView("analysis")
+  const showEnvironment = () => setView("environment")
   const loginAdmin = () => setIsAdmin(true)
   const logoutAdmin = () => setIsAdmin(false)
 
@@ -195,10 +197,10 @@ export default function App() {
   return (
     <>
       {view === "title" && (
-        <Title cameraId={cameraId} handleCameraId={handleCameraId} showViewer={showViewer} showRecord={showRecord} showAnalysis={showAnalysis} isAdmin={isAdmin} loginAdmin={loginAdmin} logoutAdmin={logoutAdmin} isRunning={isRunning} handleRunning={handleRunning} />
+        <Title cameraId={cameraId} handleCameraId={handleCameraId} showViewer={showViewer} showRecord={showRecord} showAnalysis={showAnalysis} showEnvironment={showEnvironment} isAdmin={isAdmin} loginAdmin={loginAdmin} logoutAdmin={logoutAdmin} isRunning={isRunning} handleRunning={handleRunning} />
       )}
       {view === "viewer" && (
-        <Viewer cameraId={cameraId} showTitle={showTitle} showRecord={showRecord} showAnalysis={showAnalysis} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} setReadyRecord={setReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} isRunning={isRunning} sendConfig={sendConfig} />
+        <Viewer cameraId={cameraId} showTitle={showTitle} showRecord={showRecord} showAnalysis={showAnalysis} showEnvironment={showEnvironment} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} setReadyRecord={setReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} isRunning={isRunning} sendConfig={sendConfig} />
       )}
       {view === "record" && (
         <Record cameraId={cameraId} showTitle={showTitle} showViewer={showViewer} showAnalysis={showAnalysis} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} handleReadyRecord={handleReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} records={records} date={date} handleDateChange={handleDateChange} handleDeleteRecord={handleDeleteRecord} isRunning={isRunning} isAscending={isAscending} setIsAscending={setIsAscending} />
@@ -211,6 +213,23 @@ export default function App() {
           showTitle={showTitle}
           showViewer={showViewer}
           showRecord={showRecord}
+          showEnvironment={showEnvironment}
+          handleDateChange={handleDateChange}
+          records={records}
+          date={date}
+          isRunning={isRunning}
+        />
+      )}
+      {view === "environment" && (
+        <Environment
+          isAdmin={isAdmin}
+          cameraId={cameraId}
+          isRecording={isRecording}
+          showTitle={showTitle}
+          showViewer={showViewer}
+          showRecord={showRecord}
+          showAnalysis={showAnalysis}
+          showEnvironment={showEnvironment}
           handleDateChange={handleDateChange}
           records={records}
           date={date}
