@@ -34,26 +34,11 @@ export default function App() {
   const loginAdmin = () => setIsAdmin(true)
   const logoutAdmin = () => setIsAdmin(false)
 
-  const fetchStatus = async () => {
-    try {
-      const res = await fetch(`http://${window.location.hostname}:5000/api/get_status?t=${Date.now()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.camera_id !== undefined) setCameraId(data.camera_id);
-        if (data.is_running !== undefined) setIsRunning(data.is_running);
-        if (data.is_recording !== undefined) setIsRecording(data.is_recording);
-        if (data.ready_record !== undefined) setReadyRecord(data.ready_record);
-      }
-    } catch (e) {
-      console.error("get_status error:", e);
-    }
-  };
-
   const [diskUsage, setDiskUsage] = useState<{ os: string; drive: string; total_gb: number; free_gb: number; used_gb: number; folder: string; folder_gb: number } | null>(null);
 
   const getDiskUsage = async () => {
     try {
-      const res = await fetch(`http://${window.location.hostname}:5000/api/get_disk_usage?t=${Date.now()}`);
+      const res = await fetch(`/api/get_disk_usage?t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         setDiskUsage(data);
@@ -62,11 +47,6 @@ export default function App() {
       console.error("get_disk_usage error:", e);
     }
   };
-
-  // 初回取得
-  useEffect(() => {
-    fetchStatus();
-  }, []);
 
   const handleCameraId = async (id: number) => {
     try {

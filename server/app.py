@@ -115,17 +115,6 @@ def get_camera():
   return jsonify({"camera_id": camera.camera_id})
 
 
-@app.route("/api/get_status", methods=["GET"])
-def get_status():
-  """現在のサーバー状態をまとめて取得"""
-  return jsonify({
-    "camera_id": camera.camera_id,
-    "is_running": config.is_running,
-    "is_recording": config.is_recording,
-    "ready_record": config.ready_record,
-  })
-
-
 @app.route("/api/get_disk_usage", methods=["GET"])
 def get_disk_usage():
   """ディスク使用状況を取得"""
