@@ -32,7 +32,7 @@
 .recordList {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: auto;
   gap: 10px;
   padding: 10px;
@@ -42,8 +42,6 @@
   text-align: center;
 }
 
-
-
 .recordHeaderTitle {
   font-weight: bold;
   flex: 1;
@@ -52,7 +50,6 @@
 .datepicker-container {
   position: relative;
 }
-
 
 .recordItem {
   width: 160px;
@@ -65,8 +62,8 @@
 }
 
 .thumbnail {
-  width: 150px;
-  height: 120px;
+  width: 160px;
+  height: 90px;
   margin: 5px auto;
   background-color: #000;
   display: flex;

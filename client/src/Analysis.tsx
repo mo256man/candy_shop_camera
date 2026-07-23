@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { registerLocale } from "react-datepicker";
 import ja from "date-fns/locale/ja";
 import CommonDatePicker from "./CommonDatePicker"
+import CommonFilterCondition from "./CommonFilterCondition"
+import HeaderPanel from "./HeaderPanel.tsx"
 import { TimelyGraph } from "./TImelyGraph"
 import { genderRatioChart } from "./GenderRatioChart"
 import {agePyramidChart} from "./AgePyramidChart"
+import { filterRecords } from "./filterRecords"
 import "react-datepicker/dist/react-datepicker.css"
 import "./Analysis.css"
 
@@ -17,52 +20,63 @@ type AnalysisProps = {
   showTitle: () => void;
   showViewer: () => void;
   showRecord: () => void;
-  showEnvironment: () => void;
+  showSetting: () => void;
   handleDateChange: (d: Date) => void;
   records: Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>;
   date: Date;
   isRunning: boolean;
+  filterUnknown: boolean;
+  setFilterUnknown: (v: boolean) => void;
+  filterShort: boolean;
+  setFilterShort: (v: boolean) => void;
+  hourOption: string;
+  setHourOption: (v: string) => void;
 };
 
-export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showEnvironment, handleDateChange, records, date, isRunning }: AnalysisProps) {
-  const [analysisMode, setAnalysisMode] = useState<"time" | "count">("time");
+export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showSetting, handleDateChange, records, date, isRunning, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: AnalysisProps) {
+  const [analysisMode, setAnalysisMode] = useState<"time" | "count">("count");
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
 
   const changeAnalysisMode = (mode: "time" | "count") => {
     setAnalysisMode(mode);
   }
 
+  const filteredRecords = filterRecords(records, filterUnknown, filterShort, hourOption);
+
+  const toggleDatePicker = () => {
+    setShowFilter(false);
+    setShowDatePicker(!showDatePicker);
+  }
+
+  const toggleFilter = () => {
+    setShowDatePicker(false);
+    setShowFilter(!showFilter);
+  }
+
   const headerPanel = (
-    <div className="header">
-      <div className="header-left">
-        <div className="header-icon" onClick={() => showTitle()}>🔙</div>
-      </div>
-      <div className="header-center">
-        <div className="header-title">分析画面</div>
-      </div>
-      <div className="header-right">
-        <div className="cameraControlPanel">
-          {isRecording && <div className="recordingIcon">録画中 ●</div>}
-          {isRunning ?
-            <div className="header-icon" onClick={() => showViewer()}>📷</div>
-          :
-            <div className="header-icon-disabled">📷</div>
-          }
-          <div className="header-icon" onClick={() => showRecord()}>👀</div>
-          <div className="header-icon-selected" >📊</div>
-          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
-        </div>
-      </div>
-    </div>
+    <HeaderPanel
+      title="分析画面"
+      currentPage="analysis"
+      showTitle={showTitle}
+      showViewer={showViewer}
+      showRecord={showRecord}
+      showSetting={showSetting}
+      isRunning={isRunning}
+      isRecording={isRecording}
+    />
   );
 
   const analysisHeader = (
     <div className="analysisHeader">
       <div className="analysisHeaderLeft">
       <div className="datepicker-container">
-        <div className="datepicker-icon" onClick={() => setShowDatePicker(!showDatePicker)}>📅</div>
+        <div className="datepicker-icon" onClick={toggleDatePicker}>📅</div>
         {showDatePicker && (
           <div className="calendarWrapper">
+            <div className="calendar-close-row">
+              <div className="calendar-close-btn" onClick={() => setShowDatePicker(false)}>x</div>
+            </div>
             <CommonDatePicker
               date={date}
               onChange={(d) => {
@@ -73,6 +87,17 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
           </div>
         )}
       </div>
+      <CommonFilterCondition
+        showFilter={showFilter}
+        onToggleFilter={toggleFilter}
+        onCloseFilter={() => setShowFilter(false)}
+        filterUnknown={filterUnknown}
+        setFilterUnknown={setFilterUnknown}
+        filterShort={filterShort}
+        setFilterShort={setFilterShort}
+        hourOption={hourOption}
+        setHourOption={setHourOption}
+      />
       </div>
       <div className="analysisHeaderRight">
         <div className="recordDate">{date.toLocaleDateString("ja-JP")}</div>
@@ -85,7 +110,7 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
     return (
       <div className="graphContainer">
         <div className="graphTitle">{analysisMode=== "count" ? "時間別利用回数（回）" : "時間別利用時間（秒）"}</div>
-          <TimelyGraph data={records} width={1000} height={200} analysisMode={analysisMode} />
+          <TimelyGraph data={filteredRecords} width={1000} height={200} analysisMode={analysisMode} />
       </div>
     );   
   }
@@ -94,7 +119,7 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
     return (
       <div className="graphContainer">
         <div className="graphTitle">{analysisMode === "count" ? "性別利用回数（回）" : "性別利用時間（秒）"}</div>
-        {genderRatioChart(records, analysisMode)}
+        {genderRatioChart(filteredRecords, analysisMode)}
       </div>
     );
   }
@@ -103,7 +128,7 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
     return (
       <div className="graphContainer">
         <div className="graphTitle">{analysisMode === "count" ? "年齢層別利用回数（回）" : "年齢層別利用時間（秒）"}</div>
-        {agePyramidChart(records, analysisMode)}
+        {agePyramidChart(filteredRecords, analysisMode)}
       </div>
     );
   }

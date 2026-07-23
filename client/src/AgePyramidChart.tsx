@@ -104,6 +104,15 @@ function createPyramidChart(
       : stats.female[g.key].totalDuration);
   }, 0);
 
+  // データがない場合はメッセージを表示
+  if (maxValue === 0 && maleTotal === 0 && femaleTotal === 0) {
+    return (
+      <div style={{ padding: "20px", textAlign: "center", color: "#999" }}>
+        データがありません
+      </div>
+    );
+  }
+
   const rows = ageGroups.map((group, index) => {
     const maleVal =
       analysisMode === "count"
@@ -114,14 +123,18 @@ function createPyramidChart(
         ? stats.female[group.key].count
         : stats.female[group.key].totalDuration;
 
-    const maleWidth = (maleVal / maxValue) * maxBarWidth;
-    const femaleWidth = (femaleVal / maxValue) * maxBarWidth;
+    // NaN チェックと0除算対策
+    const safeMaleVal = isNaN(maleVal) || maleVal < 0 ? 0 : maleVal;
+    const safeFemaleVal = isNaN(femaleVal) || femaleVal < 0 ? 0 : femaleVal;
+    
+    const maleWidth = maxValue > 0 ? (safeMaleVal / maxValue) * maxBarWidth : 0;
+    const femaleWidth = maxValue > 0 ? (safeFemaleVal / maxValue) * maxBarWidth : 0;
 
-    const maleRatio = maleTotal > 0 ? (maleVal / maleTotal) * 100 : 0;
-    const femaleRatio = femaleTotal > 0 ? (femaleVal / femaleTotal) * 100 : 0;
+    const maleRatio = maleTotal > 0 ? (safeMaleVal / maleTotal) * 100 : 0;
+    const femaleRatio = femaleTotal > 0 ? (safeFemaleVal / femaleTotal) * 100 : 0;
 
-    const maleDisplay = `${analysisMode === "count" ? maleVal : Math.round(maleVal)}  (${maleRatio.toFixed(1)}%)`;
-    const femaleDisplay = `${analysisMode === "count" ? femaleVal : Math.round(femaleVal)}  (${femaleRatio.toFixed(1)}%)`;
+    const maleDisplay = `${analysisMode === "count" ? safeMaleVal : Math.round(safeMaleVal)}  (${maleRatio.toFixed(1)}%)`;
+    const femaleDisplay = `${analysisMode === "count" ? safeFemaleVal : Math.round(safeFemaleVal)}  (${femaleRatio.toFixed(1)}%)`;
 
     const y = margin.top + index * rowHeight + rowHeight / 2;
     const maleX = centerX - halfLabelWidth - maleWidth; // 右寄り（中央から左）

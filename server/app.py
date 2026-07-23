@@ -2,18 +2,20 @@ isMediaPipeAvailable = True
 
 import os
 import threading
-import random
-import datetime
+import platform
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 import cv2
 import time
-from flask_socketio import SocketIO
 from myCamera import Camera
-from myDatabase import insert_camera_row, get_camera_records, delete_record, get_record_dates, insert_environment_row, get_environment_records
+from myDatabase import insert_camera_row, get_camera_records, delete_record, delete_records_by_date_range, get_record_dates, VIDEO_DIR, THUMB_DIR
+from myMemory import get_disk_and_folder_usage, export_data_to_usb
 
 # グローバル終了フラグ
 stop_flag = threading.Event()
+
+# OS情報を起動時に一度だけ取得
+SYSTEM_OS = platform.system()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "vendor_camera_secret"
@@ -22,7 +24,6 @@ OUTPUT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'outp
 
 # CORSを設定：すべてのオリジンからのリクエスト、すべてのメソッド、すべてのヘッダーを許可
 CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", ping_timeout=60, ping_interval=25)
 
 class Config:
   """アプリケーション設定管理"""
@@ -42,10 +43,7 @@ class Config:
 
   @is_recording.setter
   def is_recording(self, value):
-    if self._is_recording != value:
-      self._is_recording = value
-      if self.on_recording_change:
-        self.on_recording_change(value)
+    self._is_recording = value
   
   def clear_recording_state(self):
     self.record_start_dt = None
@@ -66,35 +64,6 @@ class Config:
 config = Config()
 camera = Camera(config)
 
-def _on_recording_change(value):
-  """is_recording変化時にWebSocketで通知"""
-  socketio.emit('status_update', {'is_recording': value})
-
-config.on_recording_change = _on_recording_change
-
-
-def _environment_recorder_loop():
-  """毎時 0, 10, 20, 30, 40, 50 分に温度・湿度をランダムに生成してDBへ記録する
-
-  温度センサーが未実装のため、温度は 20.0〜40.0 の範囲で小数第一位まで、
-  湿度は 0〜99 の範囲の整数値でランダムに決定する。
-  """
-  last_recorded_minute_mark = None
-  while not stop_flag.is_set():
-    now = datetime.datetime.now()
-    if now.minute % 10 == 0:
-      minute_mark = now.strftime("%Y-%m-%d %H:%M")
-      if minute_mark != last_recorded_minute_mark:
-        temperature = round(random.uniform(20.0, 40.0), 1)
-        humidity = random.randint(0, 99)
-        dt_str = now.strftime("%Y-%m-%d %H:%M:%S")
-        try:
-          insert_environment_row(dt_str, temperature, humidity)
-          print(f"[ENV] Recorded temperature={temperature}, humidity={humidity} at {dt_str}")
-        except Exception as e:
-          print(f"[ENV] Failed to record environment: {e}")
-        last_recorded_minute_mark = minute_mark
-    stop_flag.wait(1)
 
 
 def _generate_frames():
@@ -157,6 +126,13 @@ def get_status():
   })
 
 
+@app.route("/api/get_disk_usage", methods=["GET"])
+def get_disk_usage():
+  """ディスク使用状況を取得"""
+  usage_info = get_disk_and_folder_usage(SYSTEM_OS)
+  return jsonify(usage_info)
+
+
 @app.route("/api/set_camera", methods=["POST"])
 def set_camera():
   """カメラを切り替え"""
@@ -178,17 +154,22 @@ def set_camera():
   try:
     camera.initialize(camera_id)
     print(f"[POST /api/set_camera] Success. camera.camera_id is now {camera.camera_id}")
-    socketio.emit('status_update', {'is_recording': config.is_recording, 'camera_id': camera.camera_id, 'is_running': config.is_running, 'ready_record': config.ready_record})
     return jsonify({"status": "success", "camera_id": camera_id})
   except Exception as e:
     print(f"[POST /api/set_camera] Error: {e}")
     return jsonify({"status": "error", "message": str(e)}), 400
   
 
-@app.route("/output/<path:filename>")
-def serve_output(filename):
-  """outputフォルダの静的ファイルを配信"""
-  return send_from_directory(OUTPUT_DIR, filename)
+@app.route("/output/video/<path:filename>")
+def serve_output_video(filename):
+  """output/videoフォルダの静的ファイル（録画動画）を配信"""
+  return send_from_directory(VIDEO_DIR, filename)
+
+
+@app.route("/output/thumbnail/<path:filename>")
+def serve_output_thumbnail(filename):
+  """output/thumbnailフォルダの静的ファイル（サムネイル画像）を配信"""
+  return send_from_directory(THUMB_DIR, filename)
 
 
 @app.route("/api/get_records", methods=["POST"])
@@ -209,14 +190,6 @@ def get_record_dates_api():
   return jsonify({"dates": dates})
 
 
-@app.route("/api/get_environment_records", methods=["POST"])
-def get_environment_records_api():
-  """指定した日付の温度・湿度記録を取得"""
-  data = request.get_json()
-  dt_str = data.get("date", "")
-  records = get_environment_records(dt_str)
-  return jsonify({"records": records})
-
 
 @app.route("/api/delete_record", methods=["POST"])
 def del_record():
@@ -227,6 +200,36 @@ def del_record():
   return jsonify({"status": "success"})
 
 
+@app.route("/api/export_to_usb", methods=["POST"])
+def export_to_usb():
+  """指定期間のデータをUSBメモリにエクスポート（この機能はUbuntu専用）"""
+  data = request.get_json()
+  date_from = data.get("date_from")  # "YYYY-MM-DD"
+  date_to = data.get("date_to")      # "YYYY-MM-DD"
+  if not date_from or not date_to:
+    return jsonify({"status": "error", "message": "date_from と date_to は必須です"}), 400
+
+  # myMemory の関数を呼び出してエクスポート処理を実行
+  result = export_data_to_usb(date_from, date_to)
+  
+  if result.get("status") == "error":
+    return jsonify(result), 500
+  
+  return jsonify(result)
+
+
+@app.route("/api/delete_records_range", methods=["POST"])
+def del_records_range():
+  """指定期間の録画記録を一括削除"""
+  data = request.get_json()
+  date_from = data.get("date_from")
+  date_to = data.get("date_to")
+  if not date_from or not date_to:
+    return jsonify({"status": "error", "message": "date_from, date_to is required"}), 400
+  deleted_count = delete_records_by_date_range(date_from, date_to)
+  return jsonify({"status": "success", "deleted_count": deleted_count})
+
+
 @app.route("/api/set_running", methods=["POST"])
 def set_running():
   """isRunningの状態を設定"""
@@ -234,7 +237,6 @@ def set_running():
   is_running = data.get("running")
   print(f"[POST /api/set_running] Setting is_running to {is_running}")
   config.is_running = is_running
-  socketio.emit('status_update', {'is_recording': config.is_recording, 'is_running': config.is_running, 'ready_record': config.ready_record})
   return jsonify({"status": "success", "is_running": is_running})
 
 
@@ -245,7 +247,6 @@ def set_config():
   if "ready_record" in data:
     config.ready_record = data["ready_record"]
     print(f"[POST /api/set_config] ready_record = {config.ready_record}")
-    socketio.emit('status_update', {'ready_record': config.ready_record})
   if "is_manual_recording" in data:
     config.is_manual_recording = data["is_manual_recording"]
     print(f"[POST /api/set_config] is_manual_recording = {config.is_manual_recording}")
@@ -270,12 +271,9 @@ if __name__ == "__main__":
     except Exception as e:
       print(f"[APP] Failed to auto-initialize camera {args.camera_id}: {e}", flush=True)
 
-  env_thread = threading.Thread(target=_environment_recorder_loop, daemon=True)
-  env_thread.start()
-
   print(app.url_map)
   try:
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
   except (KeyboardInterrupt, SystemExit):
     pass
   except Exception as e:
@@ -285,5 +283,4 @@ if __name__ == "__main__":
   finally:
     print("\n[APP] Shutting down...", flush=True)
     stop_flag.set()
-    env_thread.join(timeout=3.0)
     os._exit(0)

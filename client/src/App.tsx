@@ -1,22 +1,24 @@
 import { useState, useEffect } from "react"
-import io, { Socket } from "socket.io-client"
 import "./App.css"
 import Title from "./Title.tsx"
 import Viewer from "./Viewer.tsx"
 import Record from "./Record.tsx"
 import Analysis from "./Analysis.tsx"
-import Environment from "./Environment.tsx"
+import Setting from "./Setting.tsx"
 
 export default function App() {
   // flaskに送り全クライアントで共有する状態
   const [cameraId, setCameraId] = useState<number>(0)
-  const [view, setView] = useState<"title" | "viewer" | "record" | "analysis" | "environment">("title")
+  const [view, setView] = useState<"title" | "viewer" | "record" | "analysis" | "setting">("title")
   const [isAdmin, setIsAdmin] = useState<boolean>(false)
   const [isRunning, setIsRunning] = useState<boolean>(false)
   const [readyRecord, setReadyRecord] = useState<boolean>(false)
   const [isRecording, setIsRecording] = useState<boolean>(false)
   const [isManualRecording, setIsManualRecording] = useState(false);
   const [isAscending, setIsAscending] = useState<boolean>(false);
+  const [filterUnknown, setFilterUnknown] = useState<boolean>(true);
+  const [filterShort, setFilterShort] = useState<boolean>(true);
+  const [hourOption, setHourOption] = useState<string>("");
 
   const showTitle = () => setView("title")
   const showViewer = () => setView("viewer")
@@ -25,7 +27,10 @@ export default function App() {
     setView("record");
   }
   const showAnalysis = () => setView("analysis")
-  const showEnvironment = () => setView("environment")
+  const showSetting = () => {
+    getDiskUsage();
+    setView("setting");
+  }
   const loginAdmin = () => setIsAdmin(true)
   const logoutAdmin = () => setIsAdmin(false)
 
@@ -44,54 +49,23 @@ export default function App() {
     }
   };
 
+  const [diskUsage, setDiskUsage] = useState<{ os: string; drive: string; total_gb: number; free_gb: number; used_gb: number; folder: string; folder_gb: number } | null>(null);
+
+  const getDiskUsage = async () => {
+    try {
+      const res = await fetch(`http://${window.location.hostname}:5000/api/get_disk_usage?t=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDiskUsage(data);
+      }
+    } catch (e) {
+      console.error("get_disk_usage error:", e);
+    }
+  };
+
   // 初回取得
   useEffect(() => {
     fetchStatus();
-  }, []);
-
-  // 3秒ごとにポーリング（socket.ioが届かない端末でも同期できる）
-  useEffect(() => {
-    const interval = setInterval(fetchStatus, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const socket: Socket = io(`http://${window.location.hostname}:5000`, {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: Infinity
-    });
-
-    socket.on("connect", () => {
-      console.log("Socket.IO connected");
-      fetchStatus();
-    });
-
-    socket.on("status_update", (data: { camera_id?: number; is_running?: boolean; is_recording?: boolean; ready_record?: boolean }) => {
-      console.log("Received status_update:", data);
-      if (data.camera_id !== undefined) {
-        setCameraId(data.camera_id);
-      }
-      if (data.is_running !== undefined) {
-        setIsRunning(data.is_running);
-      }
-      if (data.is_recording !== undefined) {
-        setIsRecording(data.is_recording);
-      }
-      if (data.ready_record !== undefined) {
-        setReadyRecord(data.ready_record);
-      }
-    });
-
-    socket.on("disconnect", () => {
-      console.log("Socket.IO disconnected");
-    });
-
-    return () => {
-      socket.disconnect();
-    };
   }, []);
 
   const handleCameraId = async (id: number) => {
@@ -145,6 +119,26 @@ export default function App() {
 
   const [date, setDate] = useState(new Date());
   const [records, setRecords] = useState<Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>>([]);
+  const [allRecords, setAllRecords] = useState<Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>>([]);
+
+  const getAllRecords = async () => {
+    try {
+      const res = await fetch("/api/get_records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: "" })
+      });
+      const data = await res.json();
+      setAllRecords(data.records ?? []);
+    } catch (error) {
+      console.error("Error fetching all camera records:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    getAllRecords();
+  }, [isAdmin]);
 
   const getCameraRecords = async (d: Date) => {
     const strDate = d.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
@@ -193,17 +187,35 @@ export default function App() {
       console.error("Failed to delete record:", error);
     }
   }
+
+  const handleDeleteRecordsRange = async (rangeFrom: Date, rangeTo: Date) => {
+    const strFrom = rangeFrom.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+    const strTo = rangeTo.toLocaleDateString("sv-SE", { timeZone: "Asia/Tokyo" });
+    try {
+      const res = await fetch("/api/delete_records_range", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date_from: strFrom, date_to: strTo }),
+      });
+      const data = await res.json();
+      console.log("Delete records range:", data);
+      await getAllRecords();
+      await getCameraRecords(date);
+    } catch (error) {
+      console.error("Failed to delete records range:", error);
+    }
+  }
   
   return (
     <>
       {view === "title" && (
-        <Title cameraId={cameraId} handleCameraId={handleCameraId} showViewer={showViewer} showRecord={showRecord} showAnalysis={showAnalysis} showEnvironment={showEnvironment} isAdmin={isAdmin} loginAdmin={loginAdmin} logoutAdmin={logoutAdmin} isRunning={isRunning} handleRunning={handleRunning} />
+        <Title cameraId={cameraId} handleCameraId={handleCameraId} showViewer={showViewer} showRecord={showRecord} showAnalysis={showAnalysis} showSetting={showSetting} isAdmin={isAdmin} loginAdmin={loginAdmin} logoutAdmin={logoutAdmin} isRunning={isRunning} handleRunning={handleRunning} />
       )}
       {view === "viewer" && (
-        <Viewer cameraId={cameraId} showTitle={showTitle} showRecord={showRecord} showAnalysis={showAnalysis} showEnvironment={showEnvironment} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} setReadyRecord={setReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} isRunning={isRunning} sendConfig={sendConfig} />
+        <Viewer cameraId={cameraId} showTitle={showTitle} showRecord={showRecord} showAnalysis={showAnalysis} showSetting={showSetting} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} setReadyRecord={setReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} isRunning={isRunning} sendConfig={sendConfig} />
       )}
       {view === "record" && (
-        <Record cameraId={cameraId} showTitle={showTitle} showViewer={showViewer} showAnalysis={showAnalysis} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} handleReadyRecord={handleReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} records={records} date={date} handleDateChange={handleDateChange} handleDeleteRecord={handleDeleteRecord} isRunning={isRunning} isAscending={isAscending} setIsAscending={setIsAscending} />
+        <Record cameraId={cameraId} showTitle={showTitle} showViewer={showViewer} showAnalysis={showAnalysis} showSetting={showSetting} isAdmin={isAdmin} isRecording={isRecording} handleIsRecording={handleIsRecording} readyRecord={readyRecord} handleReadyRecord={handleReadyRecord} isManualRecording={isManualRecording} handleIsManualRecording={handleIsManualRecording} records={records} date={date} handleDateChange={handleDateChange} handleDeleteRecord={handleDeleteRecord} isRunning={isRunning} isAscending={isAscending} setIsAscending={setIsAscending} filterUnknown={filterUnknown} setFilterUnknown={setFilterUnknown} filterShort={filterShort} setFilterShort={setFilterShort} hourOption={hourOption} setHourOption={setHourOption} />
       )}
       {view === "analysis" && (
         <Analysis
@@ -213,15 +225,21 @@ export default function App() {
           showTitle={showTitle}
           showViewer={showViewer}
           showRecord={showRecord}
-          showEnvironment={showEnvironment}
+          showSetting={showSetting}
           handleDateChange={handleDateChange}
           records={records}
           date={date}
           isRunning={isRunning}
+          filterUnknown={filterUnknown}
+          setFilterUnknown={setFilterUnknown}
+          filterShort={filterShort}
+          setFilterShort={setFilterShort}
+          hourOption={hourOption}
+          setHourOption={setHourOption}
         />
       )}
-      {view === "environment" && (
-        <Environment
+      {view === "setting" && (
+        <Setting
           isAdmin={isAdmin}
           cameraId={cameraId}
           isRecording={isRecording}
@@ -229,11 +247,17 @@ export default function App() {
           showViewer={showViewer}
           showRecord={showRecord}
           showAnalysis={showAnalysis}
-          showEnvironment={showEnvironment}
+          showSetting={showSetting}
           handleDateChange={handleDateChange}
           records={records}
           date={date}
           isRunning={isRunning}
+          onAdminChange={setIsAdmin}
+          handleCameraId={handleCameraId}
+          handleRunning={handleRunning}
+          allRecords={allRecords}
+          handleDeleteRecordsRange={handleDeleteRecordsRange}
+          diskUsage={diskUsage}
         />
       )}
     </>

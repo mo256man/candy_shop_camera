@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import CommonDatePicker from './CommonDatePicker.tsx'
+import CommonFilterCondition from './CommonFilterCondition.tsx'
+import HeaderPanel from './HeaderPanel.tsx'
+import { filterRecords } from './filterRecords.ts'
 import "./Record.css"
 
 type RecordProps = {
@@ -7,7 +10,7 @@ type RecordProps = {
   showTitle: () => void;
   showViewer: () => void;
   showAnalysis: () => void;
-  showEnvironment: () => void;
+  showSetting: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -22,11 +25,18 @@ type RecordProps = {
   isRunning: boolean;
   isAscending: boolean;
   setIsAscending: (v: boolean) => void;
+  filterUnknown: boolean;
+  setFilterUnknown: (v: boolean) => void;
+  filterShort: boolean;
+  setFilterShort: (v: boolean) => void;
+  hourOption: string;
+  setHourOption: (v: string) => void;
 };
 
-export default function Record({ cameraId, showTitle, showViewer, showAnalysis, isAdmin, isRecording, handleIsRecording, readyRecord, handleReadyRecord, isManualRecording, handleIsManualRecording, records, date, handleDateChange, handleDeleteRecord, isRunning, isAscending, setIsAscending }: RecordProps) {
+export default function Record({ cameraId, showTitle, showViewer, showAnalysis, showSetting, isAdmin, isRecording, handleIsRecording, readyRecord, handleReadyRecord, isManualRecording, handleIsManualRecording, records, date, handleDateChange, handleDeleteRecord, isRunning, isAscending, setIsAscending, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: RecordProps) {
   const [selectedRecord, setSelectedRecord] = useState<{ id: number; filename: string; datetime: string } | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showFilter, setShowFilter] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null)
   const flaskBase = `http://${window.location.hostname}:5000`
 
@@ -45,7 +55,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
   const downloadRecord = async (record: { filename: string }) => {
     const videoName = `${record.filename}.mp4`
     const a = document.createElement('a')
-    a.href = `/output/${videoName}`
+    a.href = `/output/video/${videoName}`
     a.download = videoName
     a.click()
   }
@@ -58,53 +68,41 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
     );
   }
 
+  const filteredRecords = filterRecords(records, filterUnknown, filterShort, hourOption);
+
+  const toggleDatePicker = () => {
+    setShowFilter(false);
+    setShowDatePicker(!showDatePicker);
+  }
+
+  const toggleFilter = () => {
+    setShowDatePicker(false);
+    setShowFilter(!showFilter);
+  }
+
   const headerPanel = (
-    <div className="header">
-      <div className="header-left">
-        <div className="header-icon" onClick={() => showTitle()}>🔙</div>
-      </div>
-      <div className="header-center">
-        <div className="header-title">データ確認画面</div>
-      </div>
-      <div className="header-right">
-        <div className="cameraControlPanel">
-          {isRecording && <div className="recordingIcon">録画中 ●</div>}
-          {isRunning ?
-            <>
-            {/* <div className="pictureInPicture">
-              <img src={`${flaskBase}/api/video_feed`} ref={imgRef} alt="video_feed"
-                onError={() => { setTimeout(reloadFeed, 2000) }}/>
-            </div> */}
-            <div className="header-icon" onClick={() => showViewer()}>📷</div>
-          </>
-          :
-            <div className="header-icon-disabled">📷</div>
-          }
-          <div className="header-icon-selected" >👀</div>
-          <div className="header-icon" onClick={() => showAnalysis()}>📊</div>
-          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
-        </div>
-      </div>
-    </div>
+    <HeaderPanel
+      title="データ確認画面"
+      currentPage="record"
+      showTitle={showTitle}
+      showViewer={showViewer}
+      showAnalysis={showAnalysis}
+      showSetting={showSetting}
+      isRunning={isRunning}
+      isRecording={isRecording}
+    />
   );
 
-
-
-
-  const recordViewer = () => {
-    return (
-      <div className="recordViewer">
-        <div>recordViewer</div>
-      </div>
-    );
-  }
 
   const recordHeader = (
     <div className="recordHeader">
       <div className="datepicker-container">
-        <div className="datepicker-icon" onClick={() => setShowDatePicker(!showDatePicker)}>📅</div>
+        <div className="datepicker-icon" onClick={toggleDatePicker}>📅</div>
         {showDatePicker && (
           <div className="calendarWrapper">
+            <div className="calendar-close-row">
+              <div className="calendar-close-btn" onClick={() => setShowDatePicker(false)}>x</div>
+            </div>
             <CommonDatePicker
               date={date}
               onChange={(d) => {
@@ -115,8 +113,19 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
           </div>
         )}
       </div>
+      <CommonFilterCondition
+        showFilter={showFilter}
+        onToggleFilter={toggleFilter}
+        onCloseFilter={() => setShowFilter(false)}
+        filterUnknown={filterUnknown}
+        setFilterUnknown={setFilterUnknown}
+        filterShort={filterShort}
+        setFilterShort={setFilterShort}
+        hourOption={hourOption}
+        setHourOption={setHourOption}
+      />
       <div className="recordDate">{date.toLocaleDateString("ja-JP")}</div>
-      <div className="recordCount">{records.length}件</div>
+      <div className="recordCount">{filteredRecords.length}件</div>
       <div onClick={() => setIsAscending(!isAscending)} className="sortBtn">
         {isAscending ? "▲ 昇順" : "▼ 降順"}
       </div>
@@ -127,9 +136,9 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
   const recordList = () => {
     return (
       <div className="recordList">
-        {sortByDateString(records, "datetime", isAscending).map((record, idx) => {
+        {sortByDateString(filteredRecords, "datetime", isAscending).map((record, idx) => {
           const filename: string = record.filename;
-          const thumnailImg: string = `/output/${filename}.jpg`;
+          const thumnailImg: string = `/output/thumbnail/${filename}.jpg`;
           const strTime: string = filename.split("_")[1].replace(/(..)(..)(..)/, "$1:$2:$3");
           const age: number = record.age;
           const gender: string = record.gender === "M" ? "男性" : record.gender === "F" ? "女性" : "不明";
@@ -186,7 +195,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
             playsInline
           >
             <source
-              src={`/output/${selectedRecord.filename}.mp4`}
+              src={`/output/video/${selectedRecord.filename}.mp4`}
               type="video/mp4"
             />
           </video>

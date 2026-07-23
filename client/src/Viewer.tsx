@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import HeaderPanel from './HeaderPanel.tsx'
 import "./Viewer.css"
 
 type ViewerProps = {
@@ -6,7 +7,7 @@ type ViewerProps = {
   showTitle: () => void;
   showRecord: () => void;
   showAnalysis: () => void;
-  showEnvironment: () => void;
+  showSetting: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -18,7 +19,7 @@ type ViewerProps = {
   sendConfig: (data: Record<string, unknown>) => void;
 };
 
-export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, showEnvironment, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
+export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, showSetting, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
   const [showPanel, setShowPanel] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
   const previousCameraIdRef = useRef<number | null>(null);
@@ -103,29 +104,18 @@ export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, 
 
 
   const headerPanel = (
-    <div className="header">
-      <div className="header-left">
-        <div className="header-icon" onClick={() => showTitle()}>🔙</div>
-        {isAdmin && adminArea()}
-      </div>
-      <div className="header-center">
-        <div className="header-title">お菓子屋さんカメラ</div>
-      </div>
-      <div className="header-right">
-        <div className="cameraControlPanel">
-          {isRecording && <div className="recordingIcon">録画中 ●</div>}
-          {readyRecord && <div className="readyIcon">【監視中】</div>}
-          {isRunning ?
-            <div className="header-icon-selected">📷</div>
-          :
-            <div className="header-icon-disabled">📷</div>
-          }
-          <div className="header-icon" onClick={() => showRecord()}>👀</div>
-          <div className="header-icon" onClick={() => showAnalysis()}>📊</div>
-          <div className="header-icon" onClick={() => showEnvironment()}>🌿</div>
-        </div>
-      </div>
-    </div>
+    <HeaderPanel
+      title="お菓子屋さんカメラ"
+      currentPage="viewer"
+      showTitle={showTitle}
+      showRecord={showRecord}
+      showAnalysis={showAnalysis}
+      showSetting={showSetting}
+      isRunning={isRunning}
+      isRecording={isRecording}
+      readyRecord={readyRecord}
+      leftExtra={isAdmin && adminArea()}
+    />
     );
 
 

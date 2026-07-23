@@ -10,7 +10,7 @@ from datetime import datetime
 # from myDeepFace import analyze_face
 from myInsightFace import analyze_face
 from myVideo import get_video_duration_seconds, generate_thumbnail, save_thumbnail_from_frame
-from myDatabase import insert_camera_row, OUTPUT_DIR, TEMP_PATH, THUMB_SCALE
+from myDatabase import insert_camera_row, OUTPUT_DIR, VIDEO_DIR, THUMB_DIR, TEMP_PATH, THUMB_SCALE
 
 # スナップショット保存先（毎時0分に1枚保存）
 SNAPSHOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'snapshot'))
@@ -68,12 +68,10 @@ class Camera:
 
     self.is_ai_available = config.is_ai_available
     if self.is_ai_available:
-      from myMediaPipe import PoseEstimator, FaceMosaic
+      from myMediaPipe import PoseEstimator
       self.estimator = PoseEstimator()
-      self.face_mosaic = FaceMosaic()
     else:
       self.estimator = None
-      self.face_mosaic = None
     self.is_found = False
     self.last_found_time = None
     self.first_found_time = None  # 検知開始時刻
@@ -105,9 +103,8 @@ class Camera:
 
     # estimatorを再生成
     if self.is_ai_available:
-      from myMediaPipe import PoseEstimator, FaceMosaic
+      from myMediaPipe import PoseEstimator
       self.estimator = PoseEstimator()
-      self.face_mosaic = FaceMosaic()
     
     # 0番はカメラ無し
     if camera_id == 0:
@@ -172,11 +169,6 @@ class Camera:
         self.estimator.close()
       except Exception as e:
         print(f"[Camera] Error closing estimator: {e}", flush=True)
-    if self.is_ai_available and self.face_mosaic is not None:
-      try:
-        self.face_mosaic.close()
-      except Exception as e:
-        print(f"[Camera] Error closing face_mosaic: {e}", flush=True)
 
     # スレッド停止後にカメラを解放する
     if self.cap is not None:
@@ -204,7 +196,7 @@ class Camera:
           if face_roi is not None:
             self.is_found = True
             x1, y1, x2, y2 = face_roi
-            # InsightFace呼び出しは間隔制限付き。モザイク前のクリーンな顔ROIを切り出す
+            # InsightFace呼び出しは間隔制限付き。クリーンな顔ROIを切り出す
             now_t = time.perf_counter()
             if now_t - self.last_deepface_time >= DEEPFACE_INTERVAL:
               roi = frame[y1:y2, x1:x2].copy()
@@ -219,17 +211,8 @@ class Camera:
           else:
             self.is_found = False
 
-          # フレーム全体から複数の顔を検出し、録画・表示の直前にモザイクをかける
-          # （InsightFace用ROIは上で取得済みのため、年齢・性別推定には影響しない）
-          self.face_mosaic.apply(frame)
-
-          # モザイク処理の後に顔ROIの赤枠を描画する
-          if face_roi is not None:
-            x1, y1, x2, y2 = face_roi
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-
           # InsightFaceスレッドへ渡す（間隔制限付き・ノンブロッキング）。
-          # サムネイル候補としてモザイク適用後のフレームを同梱し、最大面積の顔が
+          # サムネイル候補としてフレームを同梱し、最大面積の顔が
           # 推論できたタイミングでサムネイルも更新する
           if send_to_insightface:
             try:
@@ -376,6 +359,10 @@ class Camera:
     # ディレクトリ作成
     if not os.path.exists(OUTPUT_DIR):
       os.makedirs(OUTPUT_DIR)
+    if not os.path.exists(VIDEO_DIR):
+      os.makedirs(VIDEO_DIR)
+    if not os.path.exists(THUMB_DIR):
+      os.makedirs(THUMB_DIR)
     
     # 録画設定
     self.config.record_start_dt = datetime.now()
@@ -422,7 +409,7 @@ class Camera:
     # ファイル名
     timestamp = self.config.record_start_dt.strftime('%Y%m%d_%H%M%S')
     filename_base = timestamp
-    target = os.path.join(OUTPUT_DIR, f"{filename_base}.mp4")
+    target = os.path.join(VIDEO_DIR, f"{filename_base}.mp4")
     
     # 重複チェック
     if os.path.exists(target):
@@ -434,7 +421,7 @@ class Camera:
       target = f"{name}_{i}{ext}"
     
     # サムネイル生成（回転を考慮したサイズを使用）
-    thumb_path = os.path.join(OUTPUT_DIR, filename_base + ".jpg")
+    thumb_path = os.path.join(THUMB_DIR, filename_base + ".jpg")
     if self.rotate in [cv2.ROTATE_90_COUNTERCLOCKWISE, cv2.ROTATE_90_CLOCKWISE]:
       thumb_w = self.height
       thumb_h = self.width
