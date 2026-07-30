@@ -87,8 +87,13 @@ img.kanbanImage {
   color: white;
 }
 
-.colorEnvironment {
-  background-color: #4caf50;
+.colorSetting {
+  background-color: violet;
+  color: white;
+}
+
+.colorSlideShow {
+  background-color: #9c27b0;
   color: white;
 }
 

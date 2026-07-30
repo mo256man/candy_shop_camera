@@ -11,6 +11,7 @@ type RecordProps = {
   showViewer: () => void;
   showAnalysis: () => void;
   showSetting: () => void;
+  showSlideShow: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -33,7 +34,7 @@ type RecordProps = {
   setHourOption: (v: string) => void;
 };
 
-export default function Record({ cameraId, showTitle, showViewer, showAnalysis, showSetting, isAdmin, isRecording, handleIsRecording, readyRecord, handleReadyRecord, isManualRecording, handleIsManualRecording, records, date, handleDateChange, handleDeleteRecord, isRunning, isAscending, setIsAscending, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: RecordProps) {
+export default function Record({ cameraId, showTitle, showViewer, showAnalysis, showSetting, showSlideShow, isAdmin, isRecording, handleIsRecording, readyRecord, handleReadyRecord, isManualRecording, handleIsManualRecording, records, date, handleDateChange, handleDeleteRecord, isRunning, isAscending, setIsAscending, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: RecordProps) {
   const [selectedRecord, setSelectedRecord] = useState<{ id: number; filename: string; datetime: string } | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -88,6 +89,7 @@ export default function Record({ cameraId, showTitle, showViewer, showAnalysis, 
       showViewer={showViewer}
       showAnalysis={showAnalysis}
       showSetting={showSetting}
+      showSlideShow={showSlideShow}
       isRunning={isRunning}
       isRecording={isRecording}
     />

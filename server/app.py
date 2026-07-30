@@ -1,18 +1,45 @@
 isMediaPipeAvailable = True
 
 import os
+import re
 import threading
 import platform
+import subprocess
 from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 import cv2
 import time
 from myCamera import Camera
-from myDatabase import insert_camera_row, get_camera_records, delete_record, delete_records_by_date_range, get_record_dates, VIDEO_DIR, THUMB_DIR
+from myDatabase import insert_camera_row, get_camera_records, delete_record, delete_records_by_date_range, get_record_dates, VIDEO_DIR, THUMB_DIR, SNAPSHOT_DIR
 from myMemory import get_disk_and_folder_usage, export_data_to_usb
 
 # グローバル終了フラグ
 stop_flag = threading.Event()
+
+# USBエクスポートの進捗状態（ポーリング用）
+export_progress_lock = threading.Lock()
+export_progress = {"status": "idle", "done": 0, "total": 0, "message": "", "count": 0, "snapshot_count": 0, "usb_path": "", "device": ""}
+
+
+def _run_export_job(date_from, date_to):
+  """バックグラウンドスレッドでエクスポートを実行し、進捗状態を更新する"""
+  def on_progress(done, total):
+    with export_progress_lock:
+      export_progress["done"] = done
+      export_progress["total"] = total
+
+  result = export_data_to_usb(date_from, date_to, progress_callback=on_progress)
+
+  with export_progress_lock:
+    if result.get("status") == "success":
+      export_progress["status"] = "success"
+      export_progress["count"] = result.get("count", 0)
+      export_progress["snapshot_count"] = result.get("snapshot_count", 0)
+      export_progress["usb_path"] = result.get("usb_path", "")
+      export_progress["device"] = result.get("device", "")
+    else:
+      export_progress["status"] = "error"
+      export_progress["message"] = result.get("message", "エクスポートに失敗しました")
 
 # OS情報を起動時に一度だけ取得
 SYSTEM_OS = platform.system()
@@ -115,6 +142,17 @@ def get_camera():
   return jsonify({"camera_id": camera.camera_id})
 
 
+@app.route("/api/get_status", methods=["GET"])
+def get_status():
+  """現在のサーバー状態をまとめて取得"""
+  return jsonify({
+    "camera_id": camera.camera_id,
+    "is_running": config.is_running,
+    "is_recording": config.is_recording,
+    "ready_record": config.ready_record,
+  })
+
+
 @app.route("/api/get_disk_usage", methods=["GET"])
 def get_disk_usage():
   """ディスク使用状況を取得"""
@@ -161,6 +199,21 @@ def serve_output_thumbnail(filename):
   return send_from_directory(THUMB_DIR, filename)
 
 
+@app.route("/api/get_snapshot", methods=["POST"])
+def get_snapshot():
+  """指定日時（yyyyMMdd_HHMMSS、分秒は00前提）のスナップショット画像を取得。存在しない場合は404"""
+  data = request.get_json() or {}
+  dt_str = data.get("datetime", "")
+  # ディレクトリトラバーサル対策として、想定フォーマットのみ許可
+  if not re.fullmatch(r"\d{8}_\d{6}", dt_str):
+    return jsonify({"status": "error", "message": "invalid datetime format"}), 400
+  filename = f"{dt_str}.jpg"
+  filepath = os.path.join(SNAPSHOT_DIR, filename)
+  if not os.path.isfile(filepath):
+    return jsonify({"status": "error", "message": "not found"}), 404
+  return send_from_directory(SNAPSHOT_DIR, filename)
+
+
 @app.route("/api/get_records", methods=["POST"])
 def get_records():
   """録画記録を取得"""
@@ -191,20 +244,36 @@ def del_record():
 
 @app.route("/api/export_to_usb", methods=["POST"])
 def export_to_usb():
-  """指定期間のデータをUSBメモリにエクスポート（この機能はUbuntu専用）"""
+  """指定期間のデータをUSBメモリにエクスポート（この機能はUbuntu専用）
+
+  処理はバックグラウンドスレッドで実行し、即座にレスポンスを返す。
+  進捗は /api/export_progress をポーリングして取得する。
+  """
   data = request.get_json()
   date_from = data.get("date_from")  # "YYYY-MM-DD"
   date_to = data.get("date_to")      # "YYYY-MM-DD"
   if not date_from or not date_to:
     return jsonify({"status": "error", "message": "date_from と date_to は必須です"}), 400
 
-  # myMemory の関数を呼び出してエクスポート処理を実行
-  result = export_data_to_usb(date_from, date_to)
-  
-  if result.get("status") == "error":
-    return jsonify(result), 500
-  
-  return jsonify(result)
+  with export_progress_lock:
+    if export_progress["status"] == "running":
+      return jsonify({"status": "error", "message": "既にエクスポート処理が実行中です"}), 409
+    export_progress.update({
+      "status": "running", "done": 0, "total": 0, "message": "",
+      "count": 0, "snapshot_count": 0, "usb_path": "", "device": "",
+    })
+
+  thread = threading.Thread(target=_run_export_job, args=(date_from, date_to), daemon=True)
+  thread.start()
+
+  return jsonify({"status": "started"})
+
+
+@app.route("/api/export_progress", methods=["GET"])
+def get_export_progress():
+  """USBエクスポートの進捗状態を返す（ポーリング用）"""
+  with export_progress_lock:
+    return jsonify(dict(export_progress))
 
 
 @app.route("/api/delete_records_range", methods=["POST"])
@@ -242,6 +311,24 @@ def set_config():
   return jsonify({"status": "success"})
 
 
+@app.route("/api/shutdown", methods=["GET"])
+def shutdown():
+  """システムをシャットダウン（Ubuntu専用）"""
+  if SYSTEM_OS != "Linux":
+    return jsonify({"status": "error", "message": "Shutdown is only available on Linux/Ubuntu"}), 400
+  
+  try:
+    # sudo shutdown now を実行
+    subprocess.run(["sudo", "shutdown", "now"], check=True)
+    return jsonify({"status": "success", "message": "Shutdown command executed"})
+  except subprocess.CalledProcessError as e:
+    print(f"[GET /api/shutdown] Error: {e}")
+    return jsonify({"status": "error", "message": str(e)}), 500
+  except Exception as e:
+    print(f"[GET /api/shutdown] Unexpected error: {e}")
+    return jsonify({"status": "error", "message": str(e)}), 500
+
+
 if __name__ == "__main__":
   import argparse
 
@@ -251,14 +338,24 @@ if __name__ == "__main__":
   args = parser.parse_args()
 
   # カメラIDが引数で指定されている場合は自動でカメラを初期化し、AI連動録画を有効化する
+  # 起動直後はネットワークカメラ(AXIS)やUSBカメラがまだ準備できていないことがあるため、
+  # 数回リトライしてから諦める（systemd自動起動時のレースコンディション対策）。
   if args.camera_id is not None:
-    try:
-      camera.initialize(args.camera_id)
-      config.is_running = True
-      config.ready_record = True
-      print(f"[APP] Auto-start with camera_id={args.camera_id}, is_running=True, ready_record=True")
-    except Exception as e:
-      print(f"[APP] Failed to auto-initialize camera {args.camera_id}: {e}", flush=True)
+    MAX_INIT_RETRIES = 10
+    RETRY_INTERVAL_SEC = 3
+    for attempt in range(1, MAX_INIT_RETRIES + 1):
+      try:
+        camera.initialize(args.camera_id)
+        config.is_running = True
+        config.ready_record = True
+        print(f"[APP] Auto-start with camera_id={args.camera_id}, is_running=True, ready_record=True (attempt {attempt})")
+        break
+      except Exception as e:
+        print(f"[APP] Failed to auto-initialize camera {args.camera_id} (attempt {attempt}/{MAX_INIT_RETRIES}): {e}", flush=True)
+        if attempt < MAX_INIT_RETRIES:
+          time.sleep(RETRY_INTERVAL_SEC)
+        else:
+          print(f"[APP] Giving up auto-initializing camera {args.camera_id} after {MAX_INIT_RETRIES} attempts.", flush=True)
 
   print(app.url_map)
   try:

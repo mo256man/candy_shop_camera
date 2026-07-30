@@ -211,9 +211,62 @@
 
 .infoText {
   margin: 0 10px 10px 20px;
-  height: 20px;
+  height: 24px;
   font-size: 20px;
   color: #333;
   background-color: #f9f9f9;
-  
+  position: relative;
+  overflow: hidden;
+}
+
+.progressBarFill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background-color: #90caf9;
+  transition: width 0.3s ease;
+}
+
+.infoTextLabel {
+  position: relative;
+  z-index: 1;
+}
+
+.shutDownBtn {
+  font-size: 20px;
+  width: 200px;
+  height: 60px;
+  display: flex;
+  margin-left: 20px;
+  color: white;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
+
+.shutDownBtn.red{
+  background-color: red;
+}
+
+.shutDownBtn.black{
+  background-color: black;
+}
+
+.btnWhen {
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  color: #333;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+  margin: 0 10px;
 }

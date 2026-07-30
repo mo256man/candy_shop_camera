@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import "./HeaderPanel.css"
 
-type PageName = "viewer" | "record" | "analysis" | "setting";
+type PageName = "viewer" | "record" | "analysis" | "setting" | "slideshow";
 
 type HeaderPanelProps = {
   title: string;
@@ -11,6 +11,7 @@ type HeaderPanelProps = {
   showRecord?: () => void;
   showAnalysis?: () => void;
   showSetting?: () => void;
+  showSlideShow?: () => void;
   isRunning: boolean;
   isRecording: boolean;
   readyRecord?: boolean;
@@ -25,6 +26,7 @@ export default function HeaderPanel({
   showRecord,
   showAnalysis,
   showSetting,
+  showSlideShow,
   isRunning,
   isRecording,
   readyRecord = false,
@@ -51,6 +53,10 @@ export default function HeaderPanel({
     ? <div className="header-icon-selected">📊</div>
     : <div className="header-icon" onClick={() => showAnalysis?.()}>📊</div>;
 
+  const slideShowIcon = currentPage === "slideshow"
+    ? <div className="header-icon-selected">🖼️</div>
+    : <div className="header-icon" onClick={() => showSlideShow?.()}>🖼️</div>;
+
   const settingIcon = currentPage === "setting"
     ? <div className="header-icon-selected">⚙️</div>
     : <div className="header-icon" onClick={() => showSetting?.()}>⚙️</div>;
@@ -71,6 +77,7 @@ export default function HeaderPanel({
           {cameraIcon}
           {recordIcon}
           {analysisIcon}
+          {slideShowIcon}
           {settingIcon}
         {/* </div> */}
       </div>

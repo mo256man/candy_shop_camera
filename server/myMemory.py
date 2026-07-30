@@ -27,7 +27,7 @@ def _check_writable(mount_point):
     return False, str(e)
 
 
-def export_data_to_usb(date_from, date_to):
+def export_data_to_usb(date_from, date_to, progress_callback=None):
   """
   指定期間のデータをUSBメモリ・メモリーカードにエクスポート（Ubuntu専用）
   
@@ -37,11 +37,19 @@ def export_data_to_usb(date_from, date_to):
   Args:
     date_from: 開始日付 (YYYY-MM-DD)
     date_to: 終了日付 (YYYY-MM-DD)
+    progress_callback: (done, total) を受け取って進捗を通知するコールバック（任意）
     
   Returns:
     辞書 {"status": "success" or "error", "message": str, "count": int, "usb_path": str}
   """
-  from myDatabase import DB_PATH, VIDEO_DIR, THUMB_DIR, get_camera_records
+  from myDatabase import DB_PATH, DB_NAME, VIDEO_DIR, THUMB_DIR, SNAPSHOT_DIR, get_camera_records
+
+  def notify_progress(done, total):
+    if progress_callback is not None:
+      try:
+        progress_callback(done, total)
+      except Exception:
+        pass
   
   # USBドライブのマウントポイントを探す（/proc/mounts から /dev/sd* を検索）
   usb_mounts = []
@@ -85,28 +93,48 @@ def export_data_to_usb(date_from, date_to):
   if not write_ok:
     return {"status": "error", "message": f"メディアへの書き込みができません（{device_name}）: {write_err}"}
 
+  # snapshotフォルダを作成（存在しなければスキップ）
+  os.makedirs(SNAPSHOT_DIR, exist_ok=True)
+
   # USB上にフォルダを作成
   usb_output_dir = os.path.join(usb_path, 'output')
   usb_thumb_dir = os.path.join(usb_output_dir, 'thumbnail')
   usb_video_dir = os.path.join(usb_output_dir, 'video')
+  usb_snapshot_dir = os.path.join(usb_path, 'snapshot')
   try:
     os.makedirs(usb_thumb_dir, exist_ok=True)
     os.makedirs(usb_video_dir, exist_ok=True)
+    os.makedirs(usb_snapshot_dir, exist_ok=True)
   except Exception as e:
     return {"status": "error", "message": f"USBへのフォルダ作成に失敗しました: {str(e)}"}
 
-  # camera.sqlite をコピー（期間に関わらず全件）
-  try:
-    shutil.copy2(DB_PATH, os.path.join(usb_output_dir, 'camera.sqlite'))
-  except Exception as e:
-    return {"status": "error", "message": f"DBのコピーに失敗しました: {str(e)}"}
-
-  # 指定期間のレコードを取得してファイルをコピー
+  # 指定期間のレコードを取得
   all_records = get_camera_records()
   target_records = [
     r for r in all_records
     if date_from <= r['datetime'][:10] <= date_to
   ]
+
+  # snapshotフォルダ内の画像（yyyymmdd_hh0000.jpg）のうち期間に合うものを事前に抽出
+  date_from_ymd = date_from.replace('-', '')
+  date_to_ymd = date_to.replace('-', '')
+  target_snapshots = [
+    filename for filename in os.listdir(SNAPSHOT_DIR)
+    if filename.lower().endswith('.jpg') and date_from_ymd <= filename[:8] <= date_to_ymd
+  ]
+
+  # 進捗の分母：DBコピー(1) + レコードごとのサムネイル・動画(2件ずつ) + snapshot画像
+  total_steps = 1 + len(target_records) * 2 + len(target_snapshots)
+  done_steps = 0
+  notify_progress(done_steps, total_steps)
+
+  # camera.sqlite をコピー（期間に関わらず全件）
+  try:
+    shutil.copy2(DB_PATH, os.path.join(usb_output_dir, DB_NAME))
+  except Exception as e:
+    return {"status": "error", "message": f"DBのコピーに失敗しました: {str(e)}"}
+  done_steps += 1
+  notify_progress(done_steps, total_steps)
 
   for record in target_records:
     filename_base = record['filename']
@@ -117,6 +145,8 @@ def export_data_to_usb(date_from, date_to):
         shutil.copy2(thumb_src, os.path.join(usb_thumb_dir, f"{filename_base}.jpg"))
       except Exception:
         pass
+    done_steps += 1
+    notify_progress(done_steps, total_steps)
 
     video_src = os.path.join(VIDEO_DIR, f"{filename_base}.mp4")
     if os.path.exists(video_src):
@@ -124,10 +154,32 @@ def export_data_to_usb(date_from, date_to):
         shutil.copy2(video_src, os.path.join(usb_video_dir, f"{filename_base}.mp4"))
       except Exception:
         pass
+    done_steps += 1
+    notify_progress(done_steps, total_steps)
+
+  snapshot_count = 0
+  for filename in target_snapshots:
+    snapshot_src = os.path.join(SNAPSHOT_DIR, filename)
+    try:
+      shutil.copy2(snapshot_src, os.path.join(usb_snapshot_dir, filename))
+      snapshot_count += 1
+    except Exception:
+      pass
+    done_steps += 1
+    notify_progress(done_steps, total_steps)
+
+  # コピー内容をディスク（USBメモリ）へ確実にフラッシュする。
+  # shutil.copy2 はページキャッシュに書き込むだけのため、ここで同期しないまま
+  # 呼び出し元がUSBを取り外すと、書き込みが反映されずファイルサイズが0になる。
+  try:
+    os.sync()
+  except Exception:
+    pass
 
   return {
     "status": "success",
     "count": len(target_records),
+    "snapshot_count": snapshot_count,
     "usb_path": usb_path,
     "device": device_name,
   }

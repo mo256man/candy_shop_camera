@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { registerLocale } from "react-datepicker";
-import ja from "date-fns/locale/ja";
+import { ja } from "date-fns/locale/ja";
 import CommonDatePicker from "./CommonDatePicker"
 import CommonFilterCondition from "./CommonFilterCondition"
 import HeaderPanel from "./HeaderPanel.tsx"
@@ -21,6 +21,7 @@ type AnalysisProps = {
   showViewer: () => void;
   showRecord: () => void;
   showSetting: () => void;
+  showSlideShow: () => void;
   handleDateChange: (d: Date) => void;
   records: Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>;
   date: Date;
@@ -33,7 +34,7 @@ type AnalysisProps = {
   setHourOption: (v: string) => void;
 };
 
-export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showSetting, handleDateChange, records, date, isRunning, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: AnalysisProps) {
+export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showSetting, showSlideShow, handleDateChange, records, date, isRunning, filterUnknown, setFilterUnknown, filterShort, setFilterShort, hourOption, setHourOption }: AnalysisProps) {
   const [analysisMode, setAnalysisMode] = useState<"time" | "count">("count");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showFilter, setShowFilter] = useState(false);
@@ -62,6 +63,7 @@ export default function Analysis({ isAdmin, cameraId, isRecording, showTitle, sh
       showViewer={showViewer}
       showRecord={showRecord}
       showSetting={showSetting}
+      showSlideShow={showSlideShow}
       isRunning={isRunning}
       isRecording={isRecording}
     />

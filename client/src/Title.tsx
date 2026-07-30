@@ -8,6 +8,7 @@ type TitleProps = {
   showRecord: () => void;
   showAnalysis: () => void;
   showSetting: () => void;
+  showSlideShow: () => void;
   isAdmin: boolean;
   loginAdmin: () => void;
   logoutAdmin: () => void;
@@ -15,7 +16,7 @@ type TitleProps = {
   handleRunning: (running: boolean) => void;
 };
 
-export default function Title({ cameraId, handleCameraId, showViewer, showRecord, showAnalysis, showSetting, isAdmin, loginAdmin, logoutAdmin, isRunning, handleRunning }: TitleProps) {
+export default function Title({ cameraId, handleCameraId, showViewer, showRecord, showAnalysis, showSetting, showSlideShow, isAdmin, loginAdmin, logoutAdmin, isRunning, handleRunning }: TitleProps) {
 
   const title = (
     <div className="kanban">
@@ -33,7 +34,8 @@ export default function Title({ cameraId, handleCameraId, showViewer, showRecord
       }
       <button className="btnMenu colorRecord" onClick={showRecord}>👀 録画確認</button>
       <button className="btnMenu colorAnalysis" onClick={showAnalysis}>📊 分析結果</button>
-      <button className="btnMenu colorEnvironment" onClick={showSetting}>⚙️ 設定画面</button>
+      <button className="btnMenu colorSlideShow" onClick={showSlideShow}>🖼️ スライドショー</button>
+      <button className="btnMenu colorSetting" onClick={showSetting}>⚙️ 設定画面</button>
     </div>
   );
 

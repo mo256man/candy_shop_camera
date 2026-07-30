@@ -8,6 +8,7 @@ type ViewerProps = {
   showRecord: () => void;
   showAnalysis: () => void;
   showSetting: () => void;
+  showSlideShow: () => void;
   isAdmin: boolean;
   isRecording: boolean;
   handleIsRecording: (recording: boolean) => void;
@@ -19,7 +20,7 @@ type ViewerProps = {
   sendConfig: (data: Record<string, unknown>) => void;
 };
 
-export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, showSetting, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
+export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, showSetting, showSlideShow, isAdmin, isRecording, handleIsRecording, readyRecord, setReadyRecord, isManualRecording, handleIsManualRecording, isRunning, sendConfig }: ViewerProps) {
   const [showPanel, setShowPanel] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
   const previousCameraIdRef = useRef<number | null>(null);
@@ -105,27 +106,28 @@ export default function Viewer({ cameraId, showTitle, showRecord, showAnalysis, 
 
   const headerPanel = (
     <HeaderPanel
-      title="お菓子屋さんカメラ"
+      title="カメラ"
       currentPage="viewer"
       showTitle={showTitle}
       showRecord={showRecord}
       showAnalysis={showAnalysis}
       showSetting={showSetting}
+      showSlideShow={showSlideShow}
       isRunning={isRunning}
       isRecording={isRecording}
       readyRecord={readyRecord}
-      leftExtra={isAdmin && adminArea()}
+      // leftExtra={isAdmin && adminArea()}
     />
     );
 
 
   return (
-    <>
+    <div className="viewerMain">
     {headerPanel}
     <div className="video-wrap">
       <img key={feedKey} src={`${flaskBase}/api/video_feed`} ref={imgRef} alt="Video feed"
         onError={() => { setTimeout(reloadFeed, 2000) }}/>
     </div>
-    </>
+    </div>
   );
 }

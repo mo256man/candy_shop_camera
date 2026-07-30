@@ -10,10 +10,7 @@ from datetime import datetime
 # from myDeepFace import analyze_face
 from myInsightFace import analyze_face
 from myVideo import get_video_duration_seconds, generate_thumbnail, save_thumbnail_from_frame
-from myDatabase import insert_camera_row, OUTPUT_DIR, VIDEO_DIR, THUMB_DIR, TEMP_PATH, THUMB_SCALE
-
-# スナップショット保存先（毎時0分に1枚保存）
-SNAPSHOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'snapshot'))
+from myDatabase import insert_camera_row, OUTPUT_DIR, VIDEO_DIR, THUMB_DIR, TEMP_PATH, THUMB_SCALE, SNAPSHOT_DIR
 
 # MediaPipe処理用スケール（小さいほど軽い）
 MEDIAPIPE_SCALE = 0.5

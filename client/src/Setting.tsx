@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { registerLocale } from "react-datepicker";
-import ja from "date-fns/locale/ja";
+import { ja } from "date-fns/locale/ja";
 import CommonDatePicker from "./CommonDatePicker"
 import HeaderPanel from "./HeaderPanel.tsx"
 import PasswordPad from "./PasswordPad.tsx"
@@ -19,9 +19,7 @@ type SettingProps = {
   showRecord: () => void;
   showAnalysis: () => void;
   showSetting: () => void;
-  handleDateChange: (d: Date) => void;
-  records: Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>;
-  date: Date;
+  showSlideShow: () => void;
   isRunning: boolean;
   onAdminChange: (isAdmin: boolean) => void;
   handleCameraId: (id: number) => void;
@@ -29,6 +27,7 @@ type SettingProps = {
   allRecords: Array<{ id: number; filename: string; datetime: string; age: number; gender: string; duration: number }>;
   handleDeleteRecordsRange: (dateFrom: Date, dateTo: Date) => void;
   diskUsage: { os: string; drive: string; total_gb: number; free_gb: number; used_gb: number; folder: string; folder_gb: number } | null;
+  handleShutdown: () => Promise<void>;
 };
 
 // "YYYY-MM-DD" のキー文字列をタイムゾーンに依存せずDateへ変換
@@ -53,10 +52,12 @@ function formatMonthDayFromDate(d: Date): string {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-export default function Setting({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showAnalysis, showSetting, handleDateChange, records, date, isRunning, onAdminChange, handleCameraId, handleRunning, allRecords, handleDeleteRecordsRange, diskUsage }: SettingProps) {
+export default function Setting({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showAnalysis, showSetting, showSlideShow, isRunning, onAdminChange, handleCameraId, handleRunning, allRecords, handleDeleteRecordsRange, diskUsage, handleShutdown }: SettingProps) {
   const [activePicker, setActivePicker] = useState<"header" | "extractFrom" | "extractTo" | "deleteFrom" | "deleteTo" | null>(null);
   const [extractOption, setExtractOption] = useState<"today" | "pastWeek" | "custom" | null>(null);
   const [extractStatus, setExtractStatus] = useState<null | "loading" | { success: true; count: number; usbPath: string } | { success: false; message: string }>(null);
+  const [extractProgress, setExtractProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const extractPollIdRef = useRef<number | null>(null);
   const [deleteOption, setDeleteOption] = useState<"oldest" | "oldestWeek" | "custom" | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<null | "loading" | { success: true; deleted_count: number } | { success: false; message: string }>(null);
   const [extractDateFrom, setExtractDateFrom] = useState<Date | null>(null);
@@ -64,6 +65,7 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
   const [deleteDateFrom, setDeleteDateFrom] = useState<Date | null>(null);
   const [deleteDateTo, setDeleteDateTo] = useState<Date | null>(null);
   const [dataTab, setDataTab] = useState<"extract" | "delete">("extract");
+  const [shutdownStep, setShutdownStep] = useState<"initial" | "confirm" | "executing">("initial");
 
   const now = new Date();
   const todayKey = toDateKey(now);
@@ -96,10 +98,52 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
       }).length
     : 0;
 
-  // データ取り出し：選択中のextractDateFrom, extractDateToを元にUSBへエクスポートを実行する
+  // ポーリングを停止し、タイマーIDをクリアする
+  const stopExtractPolling = () => {
+    if (extractPollIdRef.current !== null) {
+      clearInterval(extractPollIdRef.current);
+      extractPollIdRef.current = null;
+    }
+  };
+
+  // アンマウント時にポーリングを必ず停止する
+  useEffect(() => {
+    return () => stopExtractPolling();
+  }, []);
+
+  // エクスポートの進捗をポーリングで取得し、成功・失敗で停止する
+  const pollExtractProgress = () => {
+    stopExtractPolling();
+    const id = window.setInterval(async () => {
+      try {
+        const res = await fetch("/api/export_progress");
+        const json = await res.json();
+        setExtractProgress({ done: json.done ?? 0, total: json.total ?? 0 });
+        if (json.status === "success") {
+          stopExtractPolling();
+          setExtractStatus({ success: true, count: json.count, usbPath: json.usb_path });
+          setExtractDateFrom(null);
+          setExtractDateTo(null);
+          setExtractOption(null);
+        } else if (json.status === "error") {
+          stopExtractPolling();
+          setExtractStatus({ success: false, message: json.message ?? "エクスポートに失敗しました" });
+        }
+        // "running" の間はポーリングを継続
+      } catch (error) {
+        console.error("Failed to fetch export progress:", error);
+        stopExtractPolling();
+        setExtractStatus({ success: false, message: "進捗の取得に失敗しました" });
+      }
+    }, 800);
+    extractPollIdRef.current = id;
+  };
+
+  // データ取り出し：選択中のextractDateFrom, extractDateToを元にUSBへのエクスポートを開始し、進捗をポーリングで取得する
   const extractRecords = async () => {
     if (!extractDateFrom || !extractDateTo) return;
     setExtractStatus("loading");
+    setExtractProgress({ done: 0, total: 0 });
     try {
       const res = await fetch("/api/export_to_usb", {
         method: "POST",
@@ -110,13 +154,10 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
         }),
       });
       const json = await res.json();
-      if (json.status === "success") {
-        setExtractStatus({ success: true, count: json.count, usbPath: json.usb_path });
-        setExtractDateFrom(null);
-        setExtractDateTo(null);
-        setExtractOption(null);
+      if (json.status === "started") {
+        pollExtractProgress();
       } else {
-        setExtractStatus({ success: false, message: json.message ?? "エクスポートに失敗しました" });
+        setExtractStatus({ success: false, message: json.message ?? "エクスポートの開始に失敗しました" });
       }
     } catch (error) {
       console.error("Failed to export records:", error);
@@ -162,6 +203,7 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
       showRecord={showRecord}
       showAnalysis={showAnalysis}
       showSetting={showSetting}
+      showSlideShow={showSlideShow}
       isRunning={isRunning}
       isRecording={isRecording}
     />
@@ -213,7 +255,7 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
         {dateValue ? (
           <span>{formatMonthDayFromDate(dateValue)}</span>
         ) : (
-          <button onClick={() => setActivePicker(activePicker === pickerKey ? null : pickerKey)}>click me</button>
+          <button className="btnWhen" onClick={() => setActivePicker(activePicker === pickerKey ? null : pickerKey)}>？</button>
         )}
         {activePicker === pickerKey && (
           <div className="calendarWrapper">
@@ -232,8 +274,11 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
 
   const showExtractTab = () => {
     let infoText = "";
+    let progressPercent = 0;
     if (extractStatus === "loading") {
-      infoText = "⏳ USBへコピー中...";
+      const { done, total } = extractProgress;
+      progressPercent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      infoText = total > 0 ? `⏳ USBへコピー中... (${done} / ${total})` : "⏳ USBへコピー中...";
     } else if (extractStatus) {
       if (extractStatus.success) {
         infoText = `✅ USB（${extractStatus.usbPath}）に ${extractStatus.count} 件をコピーしました`;
@@ -278,7 +323,10 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
           </div>
         </div>
         <div className="infoText">
-          {infoText}
+          {extractStatus === "loading" && (
+            <div className="progressBarFill" style={{ width: `${progressPercent}%` }} />
+          )}
+          <span className="infoTextLabel">{infoText}</span>
         </div>
       </div>
     );
@@ -362,12 +410,49 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
     );
   }
 
+  const shutDownBtn = () => {
+    let strText;
+    let className;
+    const handleClick = async () => {
+      if (shutdownStep === "initial") {
+        setShutdownStep("confirm");
+      } else if (shutdownStep === "confirm") {
+        setShutdownStep("executing");
+        await handleShutdown();
+        // 実行後は初期状態に戻す
+        setTimeout(() => setShutdownStep("initial"), 2000);
+      }
+    };
+
+    if (shutdownStep === "initial") {
+      strText = "電源オフ";
+      className = "shutDownBtn red";
+    } else if (shutdownStep === "confirm") {
+      strText = "電源オフ　OK？";
+      className = "shutDownBtn black";
+    } else {
+      strText = "実行中...";
+      className = "shutDownBtn black";
+    }
+
+    return (
+      <div>
+        <div className="settingSectionTitle"> 電源オフ（Ubuntu専用）</div>
+        <div className={className} onClick={handleClick} style={{ cursor: shutdownStep === "executing" ? "not-allowed" : "pointer", opacity: shutdownStep === "executing" ? 0.6 : 1 }}>
+          {strText}
+        </div>
+      </div>
+    );
+  }
   const settingContent = () => {
     return (
       <div>
         {showDataManagement()}
         {showDiskUsage()}
+        <div className="row">
         {showCameraSelection()}
+        {shutDownBtn()}
+        </div>
       </div>
     );
   }

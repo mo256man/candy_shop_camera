@@ -1,0 +1,58 @@
+/* DatePickerコンテナ全体のフォントサイズ */
+.react-datepicker {
+  font-size: 18px;
+}
+
+/* ヘッダー（年月表示と矢印ボタン） */
+.datepicker-header {
+  font-size: 18px;
+  font-weight: bold;
+  padding: 12px;
+}
+
+.datepicker-header button {
+  font-size: 18px;
+  padding: 6px 12px;
+}
+
+/* 曜日名 */
+.react-datepicker__day-name {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* 週の行 */
+.react-datepicker__week {
+  margin: 0;
+}
+
+/* 日付セル */
+.react-datepicker__day {
+  font-size: 16px;
+  padding: 4px;
+  margin: 0;
+}
+
+/* マウスホバー時のスタイル */
+.react-datepicker__day:hover {
+  background-color: #f0f0f0;
+  border-radius: 4px;
+}
+
+/* 選択中の日付 */
+.react-datepicker__day--selected {
+  background-color: #007bff;
+  color: white;
+}
+
+/* データがある日付のハイライト */
+.datepicker-has-data {
+  font-weight: bold;
+  color: #dc3545;
+  background-color: #fff3cd;
+}
+
+/* 他の月の日付 */
+.react-datepicker__day--outside-month {
+  color: #ccc;
+}
