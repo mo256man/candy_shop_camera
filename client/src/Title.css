@@ -53,8 +53,7 @@ img.kanbanImage {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  margin-top: 10px;
-  gap: 10px;
+  gap: 5px;
 }
 
 .btnMenu {
@@ -88,12 +87,12 @@ img.kanbanImage {
 }
 
 .colorSetting {
-  background-color: violet;
+  background-color: darkviolet;
   color: white;
 }
 
 .colorSlideShow {
-  background-color: #9c27b0;
+  background-color: darkslategray;
   color: white;
 }
 

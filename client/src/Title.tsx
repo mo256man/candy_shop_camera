@@ -28,14 +28,14 @@ export default function Title({ cameraId, handleCameraId, showViewer, showRecord
   const menu = (
     <div className="titleMenu">
       {isRunning ?
-        <button className="btnMenu colorView" onClick={showViewer}>📷 ライブ映像（cameraId={cameraId}）</button>
+        <button className="btnMenu colorView" onClick={showViewer}>📷 ライブ映像</button>
       :
         <button className="btnMenu colorNoCamera">✖ カメラ未設定</button>
       }
       <button className="btnMenu colorRecord" onClick={showRecord}>👀 録画確認</button>
       <button className="btnMenu colorAnalysis" onClick={showAnalysis}>📊 分析結果</button>
       <button className="btnMenu colorSlideShow" onClick={showSlideShow}>🖼️ スライドショー</button>
-      <button className="btnMenu colorSetting" onClick={showSetting}>⚙️ 設定画面</button>
+      <button className="btnMenu colorSetting" onClick={showSetting}>⚙️ 設定</button>
     </div>
   );
 

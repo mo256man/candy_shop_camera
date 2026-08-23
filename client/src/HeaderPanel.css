@@ -1,7 +1,7 @@
 
 .header {
   width: 100%;
-  height: 64px;
+  height: 72px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -31,7 +31,7 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
 .header-title {
@@ -49,21 +49,14 @@
 }
 
 .header-icon-selected {
-  border-radius: 10px;
   border: 4px solid lightcoral;
-  background: pink ;
-  font-size: 36px;
-  margin: auto 0;
+  background: pink;
   cursor: not-allowed;
-  user-select: none;
 }
 
 .header-icon-disabled {
-  border-radius: 10px;
   border: 4px solid darkgray;
   background: lightgray;
-  font-size: 36px;
   cursor: not-allowed;
-  user-select: none;
 }
 

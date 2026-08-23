@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import "./App.css"
 import Title from "./Title.tsx"
 import Viewer from "./Viewer.tsx"
@@ -67,24 +67,28 @@ export default function App() {
     }
   };
 
-  // 初回取得 + 一定時間だけポーリング
-  // Flaskはカメラ初期化（特にネットワークカメラ）に起動後しばらく時間が
-  // かかることがあり、Reactが先に起動して is_running=false のまま表示され続ける
-  // ことがある。is_running=true の連絡が来た時点でポーリングを終了し、
-  // また camera_id 無し起動（自動初期化しない運用）で連絡が来ない場合に備えて
-  // 一定時間経過したら諦めてポーリングを打ち切る。
+  // is_recordingなどサーバー側でAI検知に応じて非同期に変化する状態をReactへ反映するため、
+  // 起動直後だけでなく継続的にポーリングする（打ち切ると【録画中】表示等が更新されなくなる）。
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+  const wasRunningRef = useRef(false);
+
   useEffect(() => {
     let stopped = false;
     let timeoutId: ReturnType<typeof setTimeout>;
     const POLL_INTERVAL_MS = 3000;
-    const POLL_TIMEOUT_MS = 40000; // サーバー側の最大リトライ時間より少し長め
-    const startTime = Date.now();
 
     const poll = async () => {
       if (stopped) return;
       const running = await fetchStatus();
-      if (stopped || running) return; // 連絡があったので終了
-      if (Date.now() - startTime >= POLL_TIMEOUT_MS) return; // 時間切れで終了
+      // カメラ未認識→認識に変わった瞬間、タイトル画面表示中ならライブ映像へ自動遷移
+      if (running && !wasRunningRef.current && viewRef.current === "title") {
+        showViewer();
+      }
+      wasRunningRef.current = running;
+      if (stopped) return;
       timeoutId = setTimeout(poll, POLL_INTERVAL_MS);
     };
 

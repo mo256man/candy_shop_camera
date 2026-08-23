@@ -183,9 +183,9 @@ def import_stats(conn, path):
         cur.execute(
             "SELECT 商品名, 単価 FROM stats WHERE 商品ID = ?", (pid,)
         )
-        row = cur.fetchone()
-        if row is not None:
-            ex_name, ex_tanka = row
+        existing = cur.fetchone()
+        if existing is not None:
+            ex_name, ex_tanka = existing
             if ex_name != name or ex_tanka != tanka:
                 conflicts.append(
                     f"商品ID {pid}: 既存({ex_name}, {ex_tanka:g}) / "
@@ -251,7 +251,7 @@ def calc_monthly_sales(conn, year, month):
         next_month_start = datetime(year + 1, 1, 1)
     else:
         next_month_start = datetime(year, month + 1, 1)
-    
+
     start_s = f"{year:04d}-{month:02d}-01"
     end_s = next_month_start.strftime("%Y-%m-%d")
 
@@ -289,31 +289,54 @@ def calc_monthly_sales(conn, year, month):
     return rows, total
 
 
-def export_sales_data(conn):
+def export_sales_data(conn, year=None, month=None):
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT
-            h.操作ID,
-            h.商品名,
-            -CAST(h.在庫変更数 AS REAL) AS 売上数,
-            COALESCE(s.単価, 0) AS 単価,
-            h.日時
-        FROM history h
-        LEFT JOIN stats s ON h.商品ID = s.商品ID
-        WHERE h.在庫操作タイプ = '注文'
-        ORDER BY h.日時
-        """
-    )
-    
+    if year is not None and month is not None:
+        if month == 12:
+            next_month_start = datetime(year + 1, 1, 1)
+        else:
+            next_month_start = datetime(year, month + 1, 1)
+        start_s = f"{year:04d}-{month:02d}-01"
+        end_s = next_month_start.strftime("%Y-%m-%d")
+        cur.execute(
+            """
+            SELECT
+                h.操作ID,
+                h.商品名,
+                -CAST(h.在庫変更数 AS REAL) AS 売上数,
+                COALESCE(s.単価, 0) AS 単価,
+                h.日時
+            FROM history h
+            LEFT JOIN stats s ON h.商品ID = s.商品ID
+            WHERE h.在庫操作タイプ = '注文'
+              AND substr(h.日時, 1, 10) >= ?
+              AND substr(h.日時, 1, 10) < ?
+            ORDER BY h.日時
+            """,
+            (start_s, end_s),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT
+                h.操作ID,
+                h.商品名,
+                -CAST(h.在庫変更数 AS REAL) AS 売上数,
+                COALESCE(s.単価, 0) AS 単価,
+                h.日時
+            FROM history h
+            LEFT JOIN stats s ON h.商品ID = s.商品ID
+            WHERE h.在庫操作タイプ = '注文'
+            ORDER BY h.日時
+            """
+        )
+
     rows = cur.fetchall()
     if not rows:
         return "エクスポート対象がありません"
-    
-    # DataFrameを作成
+
     df = pd.DataFrame(rows, columns=['操作ID', '商品名', '売上数', '単価', '日時'])
-    
-    # xlsxに保存
+
     try:
         df.to_excel('okashiyasan.xlsx', index=False, engine='openpyxl')
         return f"エクスポート完了: {len(rows)} 件"
@@ -324,14 +347,15 @@ def export_sales_data(conn):
 def main():
     # カレントディレクトリをこのスクリプトがある場所に設定
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    
+
     conn = init_db()
 
     import_tab = [
         [
             eg.Button("history 取込", key="-HISTORY-"),
             eg.Button("stats 取込", key="-STATS-"),
-            eg.Button("Export", key="-EXPORT-"),
+            eg.Button("Monthly Export", key="-EXPORT-"),
+            eg.Button("AllTime Export", key="-EXPORT-ALLTIME-"),
         ],
         [eg.Text("", key="-MSG-IMPORT-", size=(50, 2))],
     ]
@@ -397,6 +421,11 @@ def main():
                     )
 
         elif event == "-EXPORT-":
+            now = datetime.now()
+            msg = export_sales_data(conn, now.year, now.month)
+            window["-MSG-IMPORT-"].update(msg)
+
+        elif event == "-EXPORT-ALLTIME-":
             msg = export_sales_data(conn)
             window["-MSG-IMPORT-"].update(msg)
 

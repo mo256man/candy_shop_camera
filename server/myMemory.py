@@ -37,19 +37,45 @@ def export_data_to_usb(date_from, date_to, progress_callback=None):
   Args:
     date_from: 開始日付 (YYYY-MM-DD)
     date_to: 終了日付 (YYYY-MM-DD)
-    progress_callback: (done, total) を受け取って進捗を通知するコールバック（任意）
+    progress_callback: 進捗情報の辞書
+      {"phase_no", "phase_count", "phase_label", "phase_done", "phase_total", "phase_percent"}
+      を受け取って通知するコールバック（任意）
     
   Returns:
     辞書 {"status": "success" or "error", "message": str, "count": int, "usb_path": str}
   """
-  from myDatabase import DB_PATH, DB_NAME, VIDEO_DIR, THUMB_DIR, SNAPSHOT_DIR, get_camera_records
+  from myDatabase import DB_PATH, DB_NAME, ENV_DB_PATH, VIDEO_DIR, THUMB_DIR, SNAPSHOT_DIR, get_camera_records
 
-  def notify_progress(done, total):
-    if progress_callback is not None:
-      try:
-        progress_callback(done, total)
-      except Exception:
-        pass
+  PHASE_COUNT = 4
+  PHASE_PREPARE, PHASE_SNAPSHOT, PHASE_THUMBNAIL, PHASE_VIDEO = 1, 2, 3, 4
+
+  def notify_phase(phase_no, phase_label, done, total):
+    if progress_callback is None:
+      return
+    percent = int(done / total * 100) if total > 0 else 100
+    try:
+      progress_callback({
+        "phase_no": phase_no,
+        "phase_count": PHASE_COUNT,
+        "phase_label": phase_label,
+        "phase_done": done,
+        "phase_total": total,
+        "phase_percent": percent,
+      })
+    except Exception:
+      pass
+
+  def copy_phase(phase_no, phase_label, items, copy_one):
+    """items を順にcopy_oneでコピーし、10%刻み（＋開始・完了時）にのみ進捗を通知する"""
+    total = len(items)
+    notify_phase(phase_no, phase_label, 0, total)
+    last_reported_percent = 0
+    for i, item in enumerate(items, start=1):
+      copy_one(item)
+      percent = int(i / total * 100) if total > 0 else 100
+      if percent - last_reported_percent >= 10 or i == total:
+        notify_phase(phase_no, phase_label, i, total)
+        last_reported_percent = percent
   
   # USBドライブのマウントポイントを探す（/proc/mounts から /dev/sd* を検索）
   usb_mounts = []
@@ -123,50 +149,50 @@ def export_data_to_usb(date_from, date_to, progress_callback=None):
     if filename.lower().endswith('.jpg') and date_from_ymd <= filename[:8] <= date_to_ymd
   ]
 
-  # 進捗の分母：DBコピー(1) + レコードごとのサムネイル・動画(2件ずつ) + snapshot画像
-  total_steps = 1 + len(target_records) * 2 + len(target_snapshots)
-  done_steps = 0
-  notify_progress(done_steps, total_steps)
-
-  # camera.sqlite をコピー（期間に関わらず全件）
+  # 1/4: 準備（DBコピー、期間に関わらず全件）
+  notify_phase(PHASE_PREPARE, "準備中", 0, 1)
   try:
     shutil.copy2(DB_PATH, os.path.join(usb_output_dir, DB_NAME))
+    # 環境センサー（気温・湿度・気圧）DBはPico未接続等でまだ存在しない場合があるためスキップ可
+    if os.path.exists(ENV_DB_PATH):
+      shutil.copy2(ENV_DB_PATH, os.path.join(usb_output_dir, os.path.basename(ENV_DB_PATH)))
   except Exception as e:
     return {"status": "error", "message": f"DBのコピーに失敗しました: {str(e)}"}
-  done_steps += 1
-  notify_progress(done_steps, total_steps)
+  notify_phase(PHASE_PREPARE, "準備中", 1, 1)
 
-  for record in target_records:
-    filename_base = record['filename']
-
-    thumb_src = os.path.join(THUMB_DIR, f"{filename_base}.jpg")
-    if os.path.exists(thumb_src):
-      try:
-        shutil.copy2(thumb_src, os.path.join(usb_thumb_dir, f"{filename_base}.jpg"))
-      except Exception:
-        pass
-    done_steps += 1
-    notify_progress(done_steps, total_steps)
-
-    video_src = os.path.join(VIDEO_DIR, f"{filename_base}.mp4")
-    if os.path.exists(video_src):
-      try:
-        shutil.copy2(video_src, os.path.join(usb_video_dir, f"{filename_base}.mp4"))
-      except Exception:
-        pass
-    done_steps += 1
-    notify_progress(done_steps, total_steps)
-
+  # 2/4: snapshotフォルダ内の画像コピー
   snapshot_count = 0
-  for filename in target_snapshots:
+  def copy_snapshot(filename):
+    nonlocal snapshot_count
     snapshot_src = os.path.join(SNAPSHOT_DIR, filename)
     try:
       shutil.copy2(snapshot_src, os.path.join(usb_snapshot_dir, filename))
       snapshot_count += 1
     except Exception:
       pass
-    done_steps += 1
-    notify_progress(done_steps, total_steps)
+  copy_phase(PHASE_SNAPSHOT, "スナップショット画像コピー中", target_snapshots, copy_snapshot)
+
+  # 3/4: サムネイル画像コピー
+  def copy_thumbnail(record):
+    filename_base = record['filename']
+    thumb_src = os.path.join(THUMB_DIR, f"{filename_base}.jpg")
+    if os.path.exists(thumb_src):
+      try:
+        shutil.copy2(thumb_src, os.path.join(usb_thumb_dir, f"{filename_base}.jpg"))
+      except Exception:
+        pass
+  copy_phase(PHASE_THUMBNAIL, "サムネイル画像コピー中", target_records, copy_thumbnail)
+
+  # 4/4: 動画コピー
+  def copy_video(record):
+    filename_base = record['filename']
+    video_src = os.path.join(VIDEO_DIR, f"{filename_base}.mp4")
+    if os.path.exists(video_src):
+      try:
+        shutil.copy2(video_src, os.path.join(usb_video_dir, f"{filename_base}.mp4"))
+      except Exception:
+        pass
+  copy_phase(PHASE_VIDEO, "動画コピー中", target_records, copy_video)
 
   # コピー内容をディスク（USBメモリ）へ確実にフラッシュする。
   # shutil.copy2 はページキャッシュに書き込むだけのため、ここで同期しないまま

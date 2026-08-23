@@ -54,11 +54,11 @@ function formatMonthDayFromDate(d: Date): string {
 
 export default function Setting({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showAnalysis, showSetting, showSlideShow, isRunning, onAdminChange, handleCameraId, handleRunning, allRecords, handleDeleteRecordsRange, diskUsage, handleShutdown }: SettingProps) {
   const [activePicker, setActivePicker] = useState<"header" | "extractFrom" | "extractTo" | "deleteFrom" | "deleteTo" | null>(null);
-  const [extractOption, setExtractOption] = useState<"today" | "pastWeek" | "custom" | null>(null);
+  const [extractOption, setExtractOption] = useState<"today" | "pastWeek" | "thisMonth" | "custom" | null>(null);
   const [extractStatus, setExtractStatus] = useState<null | "loading" | { success: true; count: number; usbPath: string } | { success: false; message: string }>(null);
-  const [extractProgress, setExtractProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  const [extractProgress, setExtractProgress] = useState<{ phaseNo: number; phaseCount: number; phaseLabel: string; phasePercent: number }>({ phaseNo: 0, phaseCount: 4, phaseLabel: "", phasePercent: 0 });
   const extractPollIdRef = useRef<number | null>(null);
-  const [deleteOption, setDeleteOption] = useState<"oldest" | "oldestWeek" | "custom" | null>(null);
+  const [deleteOption, setDeleteOption] = useState<"oldest" | "oldestWeek" | "oldestMonth" | "custom" | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<null | "loading" | { success: true; deleted_count: number } | { success: false; message: string }>(null);
   const [extractDateFrom, setExtractDateFrom] = useState<Date | null>(null);
   const [extractDateTo, setExtractDateTo] = useState<Date | null>(null);
@@ -66,27 +66,42 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
   const [deleteDateTo, setDeleteDateTo] = useState<Date | null>(null);
   const [dataTab, setDataTab] = useState<"extract" | "delete">("extract");
   const [shutdownStep, setShutdownStep] = useState<"initial" | "confirm" | "executing">("initial");
+  const [temperatureStatus, setTemperatureStatus] = useState<null | "loading" | { success: true; temperature: number | null } | { success: false; message: string }>(null);
 
   const now = new Date();
   const todayKey = toDateKey(now);
   const pastWeekStartKey = toDateKey(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
+  const [todayYear, todayMonth] = todayKey.split("-").map(Number);
+  const thisMonthStartKey = `${todayYear}-${String(todayMonth).padStart(2, "0")}-01`;
 
   const today = formatMonthDay(todayKey);
   const pastWeek = formatMonthDay(pastWeekStartKey);
+  const thisMonth = formatMonthDay(thisMonthStartKey);
 
   const recordDateKeys = allRecords.map(r => r.datetime.substring(0, 10)).sort();
   const oldestDateKey = recordDateKeys.length > 0 ? recordDateKeys[0] : null;
   const oldestWeekEndKey = oldestDateKey
     ? toDateKey(new Date(parseDateKey(oldestDateKey).getTime() + 6 * 24 * 60 * 60 * 1000))
     : null;
+  const oldestMonthEndKey = oldestDateKey
+    ? (() => {
+        const d = parseDateKey(oldestDateKey);
+        return toDateKey(new Date(d.getFullYear(), d.getMonth() + 1, d.getDate() - 1));
+      })()
+    : null;
 
   const oldestDate = oldestDateKey ? formatMonthDay(oldestDateKey) : "データなし";
   const oldestWeek = oldestWeekEndKey ? formatMonthDay(oldestWeekEndKey) : "データなし";
+  const oldestMonth = oldestMonthEndKey ? formatMonthDay(oldestMonthEndKey) : "データなし";
 
   const todayCount = allRecords.filter(r => r.datetime.substring(0, 10) === todayKey).length;
   const pastWeekCount = allRecords.filter(r => {
     const key = r.datetime.substring(0, 10);
     return key >= pastWeekStartKey && key <= todayKey;
+  }).length;
+  const thisMonthCount = allRecords.filter(r => {
+    const key = r.datetime.substring(0, 10);
+    return key >= thisMonthStartKey && key <= todayKey;
   }).length;
   const oldestDateCount = oldestDateKey
     ? allRecords.filter(r => r.datetime.substring(0, 10) === oldestDateKey).length
@@ -95,6 +110,12 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
     ? allRecords.filter(r => {
         const key = r.datetime.substring(0, 10);
         return key >= oldestDateKey && key <= oldestWeekEndKey;
+      }).length
+    : 0;
+  const oldestMonthCount = (oldestDateKey && oldestMonthEndKey)
+    ? allRecords.filter(r => {
+        const key = r.datetime.substring(0, 10);
+        return key >= oldestDateKey && key <= oldestMonthEndKey;
       }).length
     : 0;
 
@@ -118,7 +139,12 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
       try {
         const res = await fetch("/api/export_progress");
         const json = await res.json();
-        setExtractProgress({ done: json.done ?? 0, total: json.total ?? 0 });
+        setExtractProgress({
+          phaseNo: json.phase_no ?? 0,
+          phaseCount: json.phase_count ?? 4,
+          phaseLabel: json.phase_label ?? "",
+          phasePercent: json.phase_percent ?? 0,
+        });
         if (json.status === "success") {
           stopExtractPolling();
           setExtractStatus({ success: true, count: json.count, usbPath: json.usb_path });
@@ -143,7 +169,7 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
   const extractRecords = async () => {
     if (!extractDateFrom || !extractDateTo) return;
     setExtractStatus("loading");
-    setExtractProgress({ done: 0, total: 0 });
+    setExtractProgress({ phaseNo: 0, phaseCount: 4, phaseLabel: "", phasePercent: 0 });
     try {
       const res = await fetch("/api/export_to_usb", {
         method: "POST",
@@ -276,9 +302,9 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
     let infoText = "";
     let progressPercent = 0;
     if (extractStatus === "loading") {
-      const { done, total } = extractProgress;
-      progressPercent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-      infoText = total > 0 ? `⏳ USBへコピー中... (${done} / ${total})` : "⏳ USBへコピー中...";
+      const { phaseNo, phaseCount, phaseLabel, phasePercent } = extractProgress;
+      progressPercent = phasePercent;
+      infoText = phaseNo > 0 ? `⏳ ${phaseNo}/${phaseCount}: ${phaseLabel}（${phasePercent}%）` : "⏳ 準備中...";
     } else if (extractStatus) {
       if (extractStatus.success) {
         infoText = `✅ USB（${extractStatus.usbPath}）に ${extractStatus.count} 件をコピーしました`;
@@ -304,6 +330,14 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
               <div><b>1週間分</b></div>
               <div>（{pastWeek}～）</div>
               <div>{pastWeekCount}件</div>
+            </div>
+          </div>
+          <div className={`btnDate ${extractOption === "thisMonth" ? "active" : ""}`} 
+            onClick={() => { setExtractOption("thisMonth"); setExtractDateFrom(parseDateKey(thisMonthStartKey)); setExtractDateTo(parseDateKey(todayKey)); }}>
+            <div className="column">
+              <div><b>今月</b></div>
+              <div>（{thisMonth}～）</div>
+              <div>{thisMonthCount}件</div>
             </div>
           </div>
           <div className={`btnDate ${extractOption === "custom" ? "active" : ""}`} 
@@ -371,6 +405,18 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
             <div>（～{oldestWeek}）</div>
             <div>{oldestWeekCount}件</div>
           </div>
+          <div className={`btnDate ${deleteOption === "oldestMonth" ? "active" : ""}`} 
+            onClick={() => {
+              setDeleteOption("oldestMonth");
+              if (oldestDateKey && oldestMonthEndKey) {
+                setDeleteDateFrom(parseDateKey(oldestDateKey));
+                setDeleteDateTo(parseDateKey(oldestMonthEndKey));
+              }
+            }}>
+            <div><b>もっとも古い1か月分</b></div>
+            <div>（～{oldestMonth}）</div>
+            <div>{oldestMonthCount}件</div>
+          </div>
           <div className={`btnDate ${deleteOption === "custom" ? "active" : ""}`} 
             onClick={() => { setDeleteOption("custom"); setDeleteDateFrom(null); setDeleteDateTo(null); }}>
             <div><b>期日指定</b></div>
@@ -410,6 +456,23 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
     );
   }
 
+  const loginBtn = () => {
+    const handleClick = () => {
+      if (isAdmin) {
+        onAdminChange(false);
+      }
+    };
+    return (
+      <div>
+        <div className="settingSectionTitle">ログアウト</div>
+        <div className="btnLogout" onClick={handleClick}>
+          ログアウト
+        </div>
+      </div>
+    )
+  }
+
+
   const shutDownBtn = () => {
     let strText;
     let className;
@@ -444,13 +507,50 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
       </div>
     );
   }
+
+
+  const temperatureBtn = () => {
+    const handleClick = async () => {
+      setTemperatureStatus("loading");
+      try {
+        const res = await fetch("/api/get_temperature");
+        const json = await res.json();
+        if (json.status === "success") {
+          setTemperatureStatus({ success: true, temperature: json.temperature });
+        } else {
+          setTemperatureStatus({ success: false, message: json.message ?? "取得に失敗しました" });
+        }
+      } catch (error) {
+        console.error("Failed to fetch temperature:", error);
+        setTemperatureStatus({ success: false, message: "サーバーへの接続に失敗しました" });
+      }
+    };
+
+    let text = "🌡️ 温度を取得";
+    if (temperatureStatus === "loading") {
+      text = "取得中...";
+    } else if (temperatureStatus) {
+      text = temperatureStatus.success
+        ? (temperatureStatus.temperature != null ? `🌡️ ${temperatureStatus.temperature}℃` : "🌡️ 取得不可")
+        : `❌ ${temperatureStatus.message}`;
+    }
+
+    return (
+      <div className="btnTemperature" onClick={handleClick}>
+        {text}
+      </div>
+    );
+  }
+
   const settingContent = () => {
     return (
       <div>
+        {temperatureBtn()}
         {showDataManagement()}
         {showDiskUsage()}
         <div className="row">
         {showCameraSelection()}
+        {loginBtn()}
         {shutDownBtn()}
         </div>
       </div>

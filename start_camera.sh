@@ -86,9 +86,11 @@ echo "[start_camera] PYTHON      = ${PYTHON}"
 echo "[start_camera] NPM         = ${NPM}"
 
 # --- Flask サーバー起動（カメラ自動初期化 + AI連動録画オン）---
-echo "[start_camera] Starting Flask server..."
+# systemd経由だとコンソールが無くprint()を直接確認できないため、ログをファイルにも残す
+FLASK_LOG="${PROJECT_DIR}/server.log"
+echo "[start_camera] Starting Flask server... (log: ${FLASK_LOG})"
 cd "${SERVER_DIR}"
-"${PYTHON}" app.py --camera_id="${CAMERA_ID}" &
+"${PYTHON}" app.py --camera_id="${CAMERA_ID}" >> "${FLASK_LOG}" 2>&1 &
 FLASK_PID=$!
 
 # --- Vite クライアント起動 ---

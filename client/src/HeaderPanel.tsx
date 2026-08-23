@@ -39,26 +39,26 @@ export default function HeaderPanel({
 
   const cameraIcon = currentPage === "viewer"
     ? (isRunning
-        ? <div className="header-icon-selected">📷</div>
-        : <div className="header-icon-disabled">📷</div>)
+        ? <div className="header-icon header-icon-selected">📷</div>
+        : <div className="header-icon header-icon-disabled">📷</div>)
     : (isRunning
         ? <div className="header-icon" onClick={() => showViewer?.()}>📷</div>
-        : <div className="header-icon-disabled">📷</div>);
+        : <div className="header-icon header-icon-disabled">📷</div>);
 
   const recordIcon = currentPage === "record"
-    ? <div className="header-icon-selected">👀</div>
+    ? <div className="header-icon header-icon-selected">👀</div>
     : <div className="header-icon" onClick={() => showRecord?.()}>👀</div>;
 
   const analysisIcon = currentPage === "analysis"
-    ? <div className="header-icon-selected">📊</div>
+    ? <div className="header-icon header-icon-selected">📊</div>
     : <div className="header-icon" onClick={() => showAnalysis?.()}>📊</div>;
 
   const slideShowIcon = currentPage === "slideshow"
-    ? <div className="header-icon-selected">🖼️</div>
+    ? <div className="header-icon header-icon-selected">🖼️</div>
     : <div className="header-icon" onClick={() => showSlideShow?.()}>🖼️</div>;
 
   const settingIcon = currentPage === "setting"
-    ? <div className="header-icon-selected">⚙️</div>
+    ? <div className="header-icon header-icon-selected">⚙️</div>
     : <div className="header-icon" onClick={() => showSetting?.()}>⚙️</div>;
 
   return (
@@ -72,14 +72,12 @@ export default function HeaderPanel({
         {currentPage === "viewer" && readyRecord && <div className="readyIcon">【監視中】</div>}
       </div>
       <div className="header-right">
-        {/* <div className="cameraControlPanel"> */}
           {titleIcon}
           {cameraIcon}
           {recordIcon}
           {analysisIcon}
           {slideShowIcon}
           {settingIcon}
-        {/* </div> */}
       </div>
     </div>
   );

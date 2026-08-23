@@ -12,7 +12,7 @@ TEMP_PATH = os.path.join(OUTPUT_DIR, '_recording_temp.mp4')
 SNAPSHOT_DIR = os.path.abspath(os.path.join(base_dir, '..', 'snapshot'))
 DB_NAME = '_camera.sqlite'
 DB_PATH = os.path.join(OUTPUT_DIR, DB_NAME)
-ENV_DB_PATH = os.path.join(OUTPUT_DIR, '_environment.sqlite')
+ENV_DB_PATH = os.path.join(OUTPUT_DIR, '_sensor.sqlite')
 THUMB_SCALE = 0.5
 
 
@@ -21,6 +21,11 @@ def insert_camera_row(dt_str, filename_base, duration_sec, gender, age):
     con = sqlite3.connect(DB_PATH)
     try:
         cur = con.cursor()
+        # DBファイルが未初期化（0バイト等）でテーブルが無い場合に備えて自動作成する
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS camera ("
+            "datetime TEXT, filename TEXT, duration REAL, gender TEXT, age REAL)"
+        )
         sql = "INSERT INTO camera(datetime, filename, duration, gender, age) VALUES (?, ?, ?, ?, ?)"
         cur.execute(sql, (dt_str, filename_base, duration_sec, gender, age))
         con.commit()
@@ -84,6 +89,24 @@ def delete_record(filename):
     os.remove(thumb_path)
   else:
     print(f"Warning: Thumbnail file {thumb_path} not found for deletion.")
+
+
+def insert_environment_row(dt_str, temperature, humidity, pressure):
+  """DBに環境センサー（気温・湿度・気圧）記録を登録"""
+  con = sqlite3.connect(ENV_DB_PATH)
+  try:
+    cur = con.cursor()
+    cur.execute(
+      "CREATE TABLE IF NOT EXISTS environment ("
+      "datetime TEXT, temperature REAL, humidity REAL, pressure REAL)"
+    )
+    cur.execute(
+      "INSERT INTO environment(datetime, temperature, humidity, pressure) VALUES (?, ?, ?, ?)",
+      (dt_str, temperature, humidity, pressure)
+    )
+    con.commit()
+  finally:
+    con.close()
 
 
 def delete_records_by_date_range(date_from, date_to):

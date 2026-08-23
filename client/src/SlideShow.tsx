@@ -118,6 +118,8 @@ export default function SlideShow({ showTitle, showViewer, showRecord, showAnaly
 
   // アンマウント時にオブジェクトURLを解放
   useEffect(() => {
+    // StrictModeの開発時マウント→アンマウント→再マウントに対応するため、再マウント時にリセットする
+    unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -145,12 +147,32 @@ export default function SlideShow({ showTitle, showViewer, showRecord, showAnaly
     });
   };
 
-  const handleDateChange = (d: Date) => {
+  const handleDateChange = async (d: Date) => {
     const midnight = toMidnight(d);
     setIsPlaying(false);
     setPickedDate(midnight);
-    setCurrent(midnight);
     setShowDatePicker(false);
+
+    // その日の00:00:00に画像が無い場合に備え、実際に存在する最初の時間を探す
+    const y = midnight.getFullYear();
+    const m = String(midnight.getMonth() + 1).padStart(2, "0");
+    const day = String(midnight.getDate()).padStart(2, "0");
+    try {
+      const res = await fetch(`${flaskBase}/api/get_snapshot_hours`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: `${y}${m}${day}` }),
+      });
+      const data = await res.json();
+      const hours: number[] = data.hours ?? [];
+      const firstHour = hours.length > 0 ? hours[0] : 0;
+      const target = new Date(midnight);
+      target.setHours(firstHour);
+      setCurrent(target);
+    } catch (e) {
+      console.error("get_snapshot_hours error:", e);
+      setCurrent(midnight);
+    }
   };
 
   const toggleDatePicker = () => setShowDatePicker(prev => !prev);
@@ -175,6 +197,17 @@ export default function SlideShow({ showTitle, showViewer, showRecord, showAnaly
   const renderSlideShowControls = () => (
     <div className="slideShowControls">
       <div className="slideShowButtons">
+        <div className="datepicker-container">
+          <div className="datepicker-icon" onClick={toggleDatePicker}>📅</div>
+          {showDatePicker && (
+            <div className="calendarWrapper">
+              <div className="calendar-close-row">
+                <div className="calendar-close-btn" onClick={() => setShowDatePicker(false)}>x</div>
+              </div>
+              <CommonDatePicker date={pickedDate} onChange={handleDateChange} />
+            </div>
+          )}
+        </div>
         <button className="slideShowBtn" onClick={handlePrevDay} title="前日0時へ">⏮</button>
         {isPlaying ? (
           <button className="slideShowBtn" onClick={handleStop} title="停止">■</button>
@@ -194,17 +227,6 @@ export default function SlideShow({ showTitle, showViewer, showRecord, showAnaly
           value={intervalMs}
           onChange={(e) => setIntervalMs(Number(e.target.value))}
         />
-      </div>
-      <div className="datepicker-container">
-        <div className="datepicker-icon" onClick={toggleDatePicker}>📅</div>
-        {showDatePicker && (
-          <div className="calendarWrapper">
-            <div className="calendar-close-row">
-              <div className="calendar-close-btn" onClick={() => setShowDatePicker(false)}>x</div>
-            </div>
-            <CommonDatePicker date={pickedDate} onChange={handleDateChange} />
-          </div>
-        )}
       </div>
     </div>
   );

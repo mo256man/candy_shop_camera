@@ -326,10 +326,14 @@ class Camera:
       # 録画開始
       self._start_recording()
       self.config.previous_recording = True
+      if self.config.on_recording_change is not None:
+        self.config.on_recording_change(True)
     elif not current_recording and self.config.previous_recording:
       # 録画終了
       self._stop_recording()
       self.config.previous_recording = False
+      if self.config.on_recording_change is not None:
+        self.config.on_recording_change(False)
 
     # 固定周期で録画フレームを書き込む
     if self.config.is_recording and self.config.record_writer and self.config.next_write_time is not None:
