@@ -54,11 +54,11 @@ function formatMonthDayFromDate(d: Date): string {
 
 export default function Setting({ isAdmin, cameraId, isRecording, showTitle, showViewer, showRecord, showAnalysis, showSetting, showSlideShow, isRunning, onAdminChange, handleCameraId, handleRunning, allRecords, handleDeleteRecordsRange, diskUsage, handleShutdown }: SettingProps) {
   const [activePicker, setActivePicker] = useState<"header" | "extractFrom" | "extractTo" | "deleteFrom" | "deleteTo" | null>(null);
-  const [extractOption, setExtractOption] = useState<"today" | "pastWeek" | "thisMonth" | "custom" | null>(null);
+  const [extractOption, setExtractOption] = useState<"today" | "pastWeek" | "lastMonth" | "thisMonth" | "custom" | null>(null);
   const [extractStatus, setExtractStatus] = useState<null | "loading" | { success: true; count: number; usbPath: string } | { success: false; message: string }>(null);
   const [extractProgress, setExtractProgress] = useState<{ phaseNo: number; phaseCount: number; phaseLabel: string; phasePercent: number }>({ phaseNo: 0, phaseCount: 4, phaseLabel: "", phasePercent: 0 });
   const extractPollIdRef = useRef<number | null>(null);
-  const [deleteOption, setDeleteOption] = useState<"oldest" | "oldestWeek" | "oldestMonth" | "custom" | null>(null);
+  const [deleteOption, setDeleteOption] = useState<"oldest" | "oldestWeek" | "oldestMonth" | "lastMonth" | "custom" | null>(null);
   const [deleteStatus, setDeleteStatus] = useState<null | "loading" | { success: true; deleted_count: number } | { success: false; message: string }>(null);
   const [extractDateFrom, setExtractDateFrom] = useState<Date | null>(null);
   const [extractDateTo, setExtractDateTo] = useState<Date | null>(null);
@@ -73,10 +73,15 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
   const pastWeekStartKey = toDateKey(new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000));
   const [todayYear, todayMonth] = todayKey.split("-").map(Number);
   const thisMonthStartKey = `${todayYear}-${String(todayMonth).padStart(2, "0")}-01`;
+  const lastMonthStartDate = new Date(todayYear, todayMonth - 2, 1);
+  const lastMonthStartKey = `${lastMonthStartDate.getFullYear()}-${String(lastMonthStartDate.getMonth() + 1).padStart(2, "0")}-01`;
+  const lastMonthEndKey = toDateKey(new Date(lastMonthStartDate.getFullYear(), lastMonthStartDate.getMonth() + 1, 0));
 
   const today = formatMonthDay(todayKey);
   const pastWeek = formatMonthDay(pastWeekStartKey);
   const thisMonth = formatMonthDay(thisMonthStartKey);
+  const lastMonth = formatMonthDay(lastMonthStartKey);
+  const lastMonthEnd = formatMonthDay(lastMonthEndKey);
 
   const recordDateKeys = allRecords.map(r => r.datetime.substring(0, 10)).sort();
   const oldestDateKey = recordDateKeys.length > 0 ? recordDateKeys[0] : null;
@@ -102,6 +107,10 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
   const thisMonthCount = allRecords.filter(r => {
     const key = r.datetime.substring(0, 10);
     return key >= thisMonthStartKey && key <= todayKey;
+  }).length;
+  const lastMonthCount = allRecords.filter(r => {
+    const key = r.datetime.substring(0, 10);
+    return key >= lastMonthStartKey && key <= lastMonthEndKey;
   }).length;
   const oldestDateCount = oldestDateKey
     ? allRecords.filter(r => r.datetime.substring(0, 10) === oldestDateKey).length
@@ -332,6 +341,14 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
               <div>{pastWeekCount}件</div>
             </div>
           </div>
+          <div className={`btnDate ${extractOption === "lastMonth" ? "active" : ""}`} 
+            onClick={() => { setExtractOption("lastMonth"); setExtractDateFrom(parseDateKey(lastMonthStartKey)); setExtractDateTo(parseDateKey(lastMonthEndKey)); }}>
+            <div className="column">
+              <div><b>先月</b></div>
+              <div>（{lastMonth}～{lastMonthEnd}）</div>
+              <div>{lastMonthCount}件</div>
+            </div>
+          </div>
           <div className={`btnDate ${extractOption === "thisMonth" ? "active" : ""}`} 
             onClick={() => { setExtractOption("thisMonth"); setExtractDateFrom(parseDateKey(thisMonthStartKey)); setExtractDateTo(parseDateKey(todayKey)); }}>
             <div className="column">
@@ -416,6 +433,16 @@ export default function Setting({ isAdmin, cameraId, isRecording, showTitle, sho
             <div><b>もっとも古い1か月分</b></div>
             <div>（～{oldestMonth}）</div>
             <div>{oldestMonthCount}件</div>
+          </div>
+          <div className={`btnDate ${deleteOption === "lastMonth" ? "active" : ""}`} 
+            onClick={() => {
+              setDeleteOption("lastMonth");
+              setDeleteDateFrom(parseDateKey(lastMonthStartKey));
+              setDeleteDateTo(parseDateKey(lastMonthEndKey));
+            }}>
+            <div><b>先月</b></div>
+            <div>（{lastMonth}～{lastMonthEnd}）</div>
+            <div>{lastMonthCount}件</div>
           </div>
           <div className={`btnDate ${deleteOption === "custom" ? "active" : ""}`} 
             onClick={() => { setDeleteOption("custom"); setDeleteDateFrom(null); setDeleteDateTo(null); }}>
