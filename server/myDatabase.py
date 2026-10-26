@@ -12,7 +12,7 @@ TEMP_PATH = os.path.join(OUTPUT_DIR, '_recording_temp.mp4')
 SNAPSHOT_DIR = os.path.abspath(os.path.join(base_dir, '..', 'snapshot'))
 DB_NAME = '_camera.sqlite'
 DB_PATH = os.path.join(OUTPUT_DIR, DB_NAME)
-ENV_DB_PATH = os.path.join(OUTPUT_DIR, '_sensor.sqlite')
+ENV_DB_PATH = os.path.join(OUTPUT_DIR, '_environment.sqlite')
 THUMB_SCALE = 0.5
 
 

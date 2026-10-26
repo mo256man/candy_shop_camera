@@ -62,9 +62,17 @@ _last_environment_hour = -1  # 最後に環境データを記録した時刻（h
 
 def _find_pico_port():
   """ラズパイPicoのシリアルポートを自動検出"""
-  for port in serial.tools.list_ports.comports():
+  ports = list(serial.tools.list_ports.comports())
+
+  for port in ports:
     if "pico" in (port.description or "").lower():
       return port.device
+
+  # descriptionに'pico'を含まない環境向けのフォールバック（check_pico.py参照）
+  for port in ports:
+    if "ttyACM" in port.device:
+      return port.device
+
   return None
 
 
@@ -127,13 +135,13 @@ def _set_led_effect(label):
 
 
 def _on_recording_change(is_recording):
-  """録画開始/終了に合わせてLED演出を切替える（開始時:random_rainbow、終了時:元の演出に復帰）"""
+  """録画開始/終了に合わせてLED演出を切替える（開始時:half、終了時:元の演出に復帰）"""
   global _pre_recording_led_label
 
   if is_recording:
     with _led_state_lock:
       _pre_recording_led_label = _current_led_label
-    _set_led_effect("random_rainbow")
+    _set_led_effect("half")
   else:
     with _led_state_lock:
       restore_label = _pre_recording_led_label or "blank"
@@ -142,7 +150,7 @@ def _on_recording_change(is_recording):
 
 
 def _environment_logger_loop():
-  """毎時0分にPicoから気温・湿度・気圧を取得し、_sensor.sqliteに記録する"""
+  """毎時0分にPicoから気温・湿度・気圧を取得し、_environment.sqliteに記録する"""
   global _last_environment_hour
 
   print("[Environment] Logger thread started", flush=True)

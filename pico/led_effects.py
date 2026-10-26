@@ -20,6 +20,8 @@ class LEDEffects:
 
         self.effect_start_time = time.ticks_ms()
 
+        self.random_pulse_color = WHITE
+
         self.random_effect_func = None
         self.random_effect_args = ()
 
@@ -157,10 +159,16 @@ class LEDEffects:
 
         # ticks_diff で wrap-around を処理してから cycle_ms で割る
         cycle_ms = int(cycle_seconds * 1000)
-        elapsed_ms = time.ticks_diff(time.ticks_ms(), self.effect_start_time)
+        elapsed_ms = time.ticks_diff(
+            time.ticks_ms(),
+            self.effect_start_time
+        )
         progress = (elapsed_ms % cycle_ms) / cycle_ms
 
-        brightness = (1.0 - math.cos(progress * 2.0 * math.pi)) / 2.0
+        brightness = (
+            1.0
+            - math.cos(progress * 2.0 * math.pi)
+        ) / 2.0
 
         red, green, blue = color
 
@@ -175,6 +183,11 @@ class LEDEffects:
                 index,
                 pulse_color
             )
+
+    def random_pulse(self):
+        self.led_pulse(
+            self.random_pulse_color
+        )
 
     def led_pulse_red(self):
         self.led_pulse(RED)
@@ -433,51 +446,17 @@ class LEDEffects:
 
     def choose_random_effect(self):
         cycle_seconds = random.randint(1, 5)
-
-        effect_number = random.randint(0, 7)
+        effect_number = random.randint(0, 1)
 
         if effect_number == 0:
+            self.random_pulse_color = (
+                self.random_color()
+            )
+
             self.random_effect_func = (
-                self.led_pulse_red
+                self.random_pulse
             )
             self.random_effect_args = ()
-
-        elif effect_number == 1:
-            self.random_effect_func = (
-                self.led_pulse_yellow
-            )
-            self.random_effect_args = ()
-
-        elif effect_number == 2:
-            self.random_effect_func = (
-                self.led_pulse_green
-            )
-            self.random_effect_args = ()
-
-        elif effect_number == 3:
-            self.random_effect_func = (
-                self.led_pulse_cyan
-            )
-            self.random_effect_args = ()
-
-        elif effect_number == 4:
-            self.random_effect_func = (
-                self.led_pulse_blue
-            )
-            self.random_effect_args = ()
-
-        elif effect_number == 5:
-            self.random_effect_func = (
-                self.led_pulse_magenta
-            )
-            self.random_effect_args = ()
-
-        elif effect_number == 6:
-            self.random_effect_func = (
-                self.led_pulse_white
-            )
-            self.random_effect_args = ()
-
         else:
             direction = random.choice(
                 (-1, 1)
@@ -559,7 +538,15 @@ class LEDEffects:
     def prepare_effect(self, label):
         self.reset_effect_time()
 
-        if label == "random":
+        if label in (
+            "pulse",
+            "random_pulse"
+        ):
+            self.random_pulse_color = (
+                self.random_color()
+            )
+
+        elif label == "random":
             self.random_effect_func = None
             self.random_effect_args = ()
             self.choose_random_effect()
@@ -588,7 +575,7 @@ class LEDEffects:
             },
             {
                 "label": "pulse",
-                "func": self.led_pulse
+                "func": self.random_pulse
             },
             {
                 "label": "pulse_red",
@@ -621,6 +608,10 @@ class LEDEffects:
             {
                 "label": "half",
                 "func": self.led_half
+            },
+            {
+                "label": "random_pulse",
+                "func": self.random_pulse
             },
             {
                 "label": "random",

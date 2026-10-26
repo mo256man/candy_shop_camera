@@ -1,0 +1,61 @@
+# PyInstallerでEXE化する手順
+
+## 1回目（仮想環境作成からEXE化まで）
+
+### 作業フォルダへ移動
+
+```bat
+cd C:\作業フォルダ
+```
+
+### 仮想環境作成
+
+```bat
+python -m venv venv
+```
+
+### 仮想環境有効化
+
+```bat
+venv\Scripts\activate
+```
+
+### 必要ライブラリインストール
+
+```bat
+pip install TkEasyGUI pandas openpyxl pyinstaller
+```
+
+### EXE化
+
+```bat
+pyinstaller --onefile --windowed uriage_app.py
+```
+
+## 2回目以降（Pythonコード修正後に再EXE化）
+
+### 作業フォルダへ移動
+
+```bat
+cd C:\作業フォルダ
+```
+
+### 仮想環境有効化
+
+```bat
+venv\Scripts\activate
+```
+
+### 前回のビルド結果削除
+
+```bat
+rmdir /s /q build
+rmdir /s /q dist
+del *.spec
+```
+
+### 再EXE化
+
+```bat
+pyinstaller --onefile --windowed uriage_app.py
+```
