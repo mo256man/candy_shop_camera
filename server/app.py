@@ -60,27 +60,53 @@ _pico_lock = threading.Lock()
 _last_environment_hour = -1  # 最後に環境データを記録した時刻（hour）
 
 
+def _close_pico_serial():
+  """古いPico接続を閉じて、再接続を可能にする"""
+  global _pico_serial
+  if _pico_serial is None:
+    return
+
+  try:
+    if _pico_serial.is_open:
+      _pico_serial.close()
+  except Exception:
+    pass
+  _pico_serial = None
+
+
 def _find_pico_port():
   """ラズパイPicoのシリアルポートを自動検出"""
   ports = list(serial.tools.list_ports.comports())
 
+  candidates = []
   for port in ports:
-    if "pico" in (port.description or "").lower():
-      return port.device
+    description = (port.description or "").lower()
+    device = (port.device or "").lower()
+    combined = f"{description} {device} {port.hwid or ''}".lower()
 
-  # descriptionに'pico'を含まない環境向けのフォールバック（check_pico.py参照）
-  for port in ports:
-    if "ttyACM" in port.device:
-      return port.device
+    if any(token in combined for token in ("pico", "rp2040", "xiao", "seeed", "usb serial", "arduino")):
+      candidates.append(port.device)
 
-  return None
+    if "ttyacm" in device or "ttyusb" in device or "cu.usbmodem" in device:
+      candidates.append(port.device)
+
+  if candidates:
+    return candidates[0]
+
+  return ports[0].device if ports else None
 
 
 def _get_pico_serial():
   """Picoとのシリアル接続を取得（未接続または切断時は接続を試みる）"""
   global _pico_serial
-  if _pico_serial is not None and _pico_serial.is_open:
-    return _pico_serial
+
+  if _pico_serial is not None:
+    try:
+      if _pico_serial.is_open:
+        return _pico_serial
+    except Exception:
+      pass
+    _close_pico_serial()
 
   port = _find_pico_port()
   if port is None:
@@ -99,20 +125,36 @@ def _get_pico_serial():
 def _send_pico_command(command):
   """Picoにコマンド文字列を送信し、応答（JSON）を取得する"""
   with _pico_lock:
-    ser = _get_pico_serial()
-    if ser is None:
-      return None
-
-    try:
-      ser.reset_input_buffer()
-      ser.write((command + "\n").encode())
-      line = ser.readline()
-      if not line:
+    for attempt in range(2):
+      ser = _get_pico_serial()
+      if ser is None:
         return None
-      return json.loads(line.decode().strip())
-    except (serial.SerialException, ValueError, UnicodeDecodeError) as e:
-      print(f"[Pico] Command '{command}' failed: {e}", flush=True)
-      return None
+
+      try:
+        ser.reset_input_buffer()
+        ser.write((command + "\n").encode())
+
+        for _ in range(20):
+          line = ser.readline()
+          if not line:
+            break
+
+          text = line.decode(errors="replace").strip()
+          if not text:
+            continue
+
+          try:
+            return json.loads(text)
+          except ValueError:
+            print(f"[Pico] Ignored non-JSON line for '{command}': {text}", flush=True)
+            continue
+
+        return None
+      except (serial.SerialException, OSError, UnicodeDecodeError) as e:
+        print(f"[Pico] Command '{command}' failed: {e}", flush=True)
+        _close_pico_serial()
+
+    return None
 
 
 def _read_pico_environment():
@@ -314,7 +356,13 @@ def get_temperature():
   data = _read_pico_environment()
   if data is None:
     return jsonify({"status": "error", "message": "Picoから取得できませんでした"}), 502
-  return jsonify({"status": "success", "temperature": data.get("temperature")})
+
+  return jsonify({
+    "status": "success",
+    "temperature": data.get("temperature"),
+    "humidity": data.get("humidity"),
+    "pressure": data.get("pressure"),
+  })
 
 
 @app.route("/api/get_status", methods=["GET"])

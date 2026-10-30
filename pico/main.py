@@ -20,7 +20,8 @@ mono_led_r = Pin(17, Pin.OUT)
 mono_led_g = Pin(16, Pin.OUT)
 mono_led_b = Pin(25, Pin.OUT)
 
-led = NeoPixel(Pin(4), 1)
+# 外付けのNeoPixel LED (GPIO4)
+external_led = NeoPixel(Pin(4), 1)
 
 # True: LOWで点灯(active-low), False: HIGHで点灯(active-high)
 MONO_LED_ACTIVE_LOW = True
@@ -46,6 +47,7 @@ clear_mono_led()
 
 # 内蔵フルカラーLED (XIAO RP2040: 電源=GPIO11, データ=GPIO12)
 led_power = Pin(11, Pin.OUT)
+onboard_led = NeoPixel(Pin(12), 1)
 led_power.on()
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -71,8 +73,8 @@ MODE_OVERLAY_MS = 500
 MAIN_LOOP_SLEEP_MS = 5
 
 def set_onboard_led(color):
-    led[0] = color
-    led.write()
+    onboard_led[0] = color
+    onboard_led.write()
 
 # コード開始直後: 赤
 set_onboard_led(LED_RED)
@@ -169,11 +171,8 @@ def read_sensors():
     aht_success = read_aht()
     pressure_success = read_pressure()
 
-    temp_text = "None" if last_temperature is None else "{:.1f}C".format(last_temperature)
-    hum_text = "None" if last_humidity is None else "{:.1f}%".format(last_humidity)
-    pres_text = "None" if last_pressure is None else "{:.1f}hPa".format(last_pressure)
-    print("TEMP={}, HUM={}, PRES={}".format(temp_text, hum_text, pres_text))
-
+    # シリアルの応答は JSON のみを返すようにし、ホスト側の line-by-line 読み取りで
+    # 余計なデバッグ文字列が混ざらないようにする
     return aht_success, pressure_success
 
 
@@ -212,6 +211,8 @@ def show_sensor(read_now=True):
 
     oled.fill(0)
 
+    colon = ":" if (time.ticks_ms() // 1000) % 2 == 0 else " "
+
     if sensor_display_mode == 0:
         if last_temperature is None:
             temperature_text = "ERR"
@@ -228,20 +229,20 @@ def show_sensor(read_now=True):
         else:
             pressure_text = "{:.1f}".format(last_pressure)
 
-        oled.text("Temp:" + temperature_text, 0, 0)
-        oled.text("Hum :" + humidity_text, 0, 11)
-        oled.text("Pres:" + pressure_text, 0, 22)
+        oled.text("Temp" + colon + temperature_text, 0, 0)
+        oled.text("Hum " + colon + humidity_text, 0, 11)
+        oled.text("Pres" + colon + pressure_text, 0, 22)
 
     elif sensor_display_mode == 1:
         if last_temperature is None:
             temperature_text = "ERR"
         else:
-            temperature_text = "T:{:4.1f}C".format(last_temperature)
+            temperature_text = "T{colon}{:4.1f}C".format(last_temperature, colon=colon)
 
         if last_humidity is None:
             humidity_text = "ERR"
         else:
-            humidity_text = "H:{:4.1f}%".format(last_humidity)
+            humidity_text = "H{colon}{:4.1f}%".format(last_humidity, colon=colon)
 
         text_scale(oled, temperature_text, 0, 0, 2)
         text_scale(oled, humidity_text, 0, 16, 2)
@@ -250,9 +251,16 @@ def show_sensor(read_now=True):
         if last_temperature is None:
             temperature_text = "ERR"
         else:
-            temperature_text = "{:4.1f}C".format(last_temperature)
+            temperature_value = int(round(last_temperature * 10))
+            temperature_text = "{:03d}C".format(temperature_value)
 
         text_scale(oled, temperature_text, 0, 0, 4)
+
+        if last_temperature is not None:
+            dot_x = 62
+            dot_y = 24
+            oled.fill_rect(dot_x - 1, dot_y - 1, 6, 6, 0)
+            oled.fill_rect(dot_x, dot_y, 4, 4, 1)
 
     oled.show()
 
@@ -445,3 +453,4 @@ finally:
     set_onboard_led(LED_OFF)
     led_power.off()
     print("LED cleared")
+
